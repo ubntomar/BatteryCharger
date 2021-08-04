@@ -26,9 +26,9 @@ byte netmask[] = {255, 255, 255, 0};                 //
 char serial_temp[] = "9999";
 int reboot=0;
 int MosfetControl = 5; //D5 ,pin 9
-int acVoltajeLive = 7;
-int sensorPin = A1;  //sensor modulo de baterias 1 en A1
-int sensorPin2 = A0; //sensor modulo de baterias 2 en A0
+int acVoltajeLive = 7; //D7 ,pin 11
+int sensorPin = A1;  //A1 , pin 24 -> sensor modulo de baterias 1 en A1
+int sensorPin2 = A0; //A0 , pin 23 ->sensor modulo de baterias 2 en A0
 int ucclockin = A2;  //entrada de pulso de comando de micro pic12f629
 int buzzer = 6;
 int trigerA = 2; //OUTPUT activador para lectura sensor de voltaje
@@ -282,10 +282,10 @@ void loop()
     { //Battery charger must be 24v
       Serial.println("*****************************");
       if(!digitalRead(MosfetControl)){
-        digitalWrite(MosfetControl, HIGH);
+        digitalWrite(MosfetControl, HIGH);//turn off the battery charger
         delay(5000);  
         sensor1();
-        digitalWrite(MosfetControl, LOW); 
+        digitalWrite(MosfetControl, LOW); //turn on the battery charger
         voltajeBatterySource = sensor1Value;
       }
       else{
