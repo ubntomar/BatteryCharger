@@ -11,9 +11,9 @@
 #define MAC {0x74, 0x69, 0x69, 0x2D, 0x30, 0x3B}
 /////////////////////////////////////////////////////////////////////////
 // Default network config                                             //
-byte myip[] = {192, 168, 87, 201};                   //
+byte myip[] = {192, 168, 30, 254};                   //
 byte mymac[] = MAC; //
-byte gwip[] = {192, 168, 87, 1};                     //
+byte gwip[] = {192, 168, 30, 1};                     //
 byte static_dns[] = {8, 8, 8, 8};                    //
 byte netmask[] = {255, 255, 255, 0};                 //
 ////////////////////////////////////////////////////////////////////////
@@ -49,7 +49,7 @@ static uint32_t timer;
 static uint32_t timer2;
 static uint32_t timer3;
 unsigned long previousMillis = 0;
-const long interval = 30000; // interval at which to blink (milliseconds)
+const long interval = 130000; // interval at which to blink (milliseconds)
 int segs = 0;
 int contsegs = 0;
 int pass = 0;
@@ -265,7 +265,7 @@ void loop()
   //ether.persistTcpConnection(false);
   time = millis();
   // Serial.println(time);
-  if (time >= 43200000)
+  if (time >= 3600000)
   {
     restart(1);
   }
@@ -293,7 +293,7 @@ void loop()
         voltajeBatterySource = sensor1Value;
       }
       Serial.println("*****************************");
-      minVoltaje = 12.2;
+      minVoltaje = 12.5;
       maxVoltaje = 13.2;
       pwnChargeVolt = 254; //160
     }
