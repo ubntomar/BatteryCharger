@@ -1,5 +1,6 @@
 //las direcciones ip se deben cambia en el setup y en la funcion verifica 
-#include <EtherCard.h>
+//
+#include <EtherCard.h>//Usa por defecto pin 10 de Atmega328 P, pero el diseño de ese pin est{a} sobre el pin 12 . En este momento se modifica la tarjeta pero se podr{i}a modificar la libreria.
 #include <stdlib.h>
 #include <EEPROM.h>
 #include <YetAnotherPcInt.h>
