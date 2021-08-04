@@ -1,15 +1,29 @@
+#include <enc28j60.h>
+#include <EtherCard.h>
+#include <net.h>
+
+
+
 //las direcciones ip se deben cambia en el setup y en la funcion verifica 
 //
-#include <EtherCard.h>//Usa por defecto pin 10 de Atmega328 P, pero el diseño de ese pin est{a} sobre el pin 12 . En este momento se modifica la tarjeta pero se podr{i}a modificar la libreria.
-#include <stdlib.h>
-#include <EEPROM.h>
-#include <YetAnotherPcInt.h>
+//#include <EtherCard.h>//Usa por defecto pin 10 de Atmega328 P, pero el diseño de ese pin est{a} sobre el pin 12 . En este momento se modifica la tarjeta pero se podr{i}a modificar la libreria.
+// #include <stdlib.h>
+// #include <EEPROM.h>
+// #include <YetAnotherPcInt.h>
 #define PCINT_PIN_A4 A4
 #define DEBUG 1 
 #define BATTERYSYSTEM 12
 #define SYSTEM1 12
 #define SYSTEM2 24
 #define MAC {0x74, 0x69, 0x69, 0x2D, 0x30, 0x3B}
+/////////////////////////////////////////////////////////////////////////
+// PIN Connections (Using Arduino UNO):
+//   VCC -   3.3V     ///
+//   GND -    GND     ///
+//   SCK - Pin 13     ///Ping 17 on chip 
+//   SO  - Pin 12     ///Ping 16 on chip 
+//   SI  - Pin 11     ///Ping 15 on chip 
+//   CS  - Pin  8     ///Ping 12 on chip "!important:Arduino 1" for Atmega328P Cs=10 => pin 14 on chip!   
 /////////////////////////////////////////////////////////////////////////
 // Default network config                                             //
 byte myip[] = {192, 168, 30, 254};                   //
