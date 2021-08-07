@@ -1,3 +1,6 @@
+#include <Arduino.h>
+#line 1 "c:\\Users\\OMAR\\Documents\\BatteryCharger\\charger.ino"
+#line 1 "c:\\Users\\OMAR\\Documents\\BatteryCharger\\charger.ino"
 
 //las direcciones ip se deben cambia en el setup y en la funcion verifica 
 //
@@ -558,3 +561,4 @@ void loop()
     }
   }
 }
+
