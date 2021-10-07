@@ -1,9 +1,5 @@
 {
-    "programmer": "AVRISP mkII",
-    "board": "arduino:avr:pro",
-    "configuration": "cpu=16MHzatmega328",
-    "port": "COM3",
     "sketch": "charger.ino",
-    "output": "C:\\Users\\OMAR\\Documents\\BatteryCharger\\build"
-
+    "port": "/dev/ttyUSB0"
+    
 }
