@@ -2,7 +2,7 @@
 //las direcciones ip se deben cambia en el setup y en la funcion verifica
 //
 #include <EtherCard.h> //Usa por defecto pin 10 de Atmega328 P, pero el diseño de ese pin est{a} sobre el pin 12 . En este momento se modifica la tarjeta pero se podr{i}a modificar la libreria.
-#include <stdlib.h>
+#include <stdlib.h>    //Lo de arriba?Creo q ya no aplica por q se hace no por hardware sino por software
 #include <EEPROM.h>
 #include <YetAnotherPcInt.h>
 #define PCINT_PIN_A4 A4
@@ -49,11 +49,12 @@ int repeatstore = 0;
 int flagstore = 0;
 int getrequest = 0;
 int timeout_dns = 0;
-const char website[] PROGMEM = "www.redesagingenieria.com";
+const char website[] PROGMEM = "www.google.com";
 #define REQUEST_RATE 900000   //1800000 milliseconds  --30 minutos
 const long interval = 300000; //(milliseconds)
-int read_sensor_delay = 100;
-byte Ethernet::buffer[330]; //copy and pasted in agc.php    225
+int read_sensor_delay = 4; 
+int sample=30;
+byte Ethernet::buffer[340]; //copy and pasted in agc.php    225
 char myArray[0];
 static uint32_t timer;
 static uint32_t timer2;
@@ -80,6 +81,9 @@ char charVal[10];
 char charVal2[10]; //temporarily holds data from vals
 int dstart = 0;
 int dlen = 0;
+int ActionValueByGet=0;
+float calibrateValue=0;
+
 const char htmlHeaderphone[] PROGMEM =
     "HTTP/1.0 200 OK\r\n"
     "Content-Type: text/html\r\n"
@@ -209,9 +213,9 @@ int divider = 0, noteDuration = 0;
 /////  END OF MELODY CONFIG
 // ---------------------JAVASCRIPT------------------------      ///
 //m=(y2-y1)/(x2-x1)
-// let x1=225.0
+// let x1=222.0
 // let y1=12.0
-// let x2=262.0
+// let x2=257.5
 // let y2=14.0
 // let m=(y2-y1)/(x2-x1)
 // //y1=mx1+b
@@ -221,6 +225,9 @@ int divider = 0, noteDuration = 0;
 // console.log("m= "+m)
 // console.log("b= "+b)
 // console.log("y= "+y)
+// "m= 0.056338028169014086"
+// "b= -0.5070422535211279"
+// "y= 12.169014084507042"
 //y=(0.05405405405405406 * x) + -0.16216216216216317                               /////
 
 void sensor1()
@@ -228,9 +235,9 @@ void sensor1()
   int lectura = 0;
   int sumLectura = 0;
   float x = 0;
-  double m = 0.05405405405405406;
-  double b = -0.16216216216216317;
-  for (int i = 0; i < 5; i++)
+  double m = 0.056338028169014086;
+  double b = -0.5070422535211279;
+  for (int i = 0; i < sample; i++)
   {
     digitalWrite(trigerA, HIGH);
     delay(read_sensor_delay);
@@ -238,19 +245,19 @@ void sensor1()
     sumLectura += lectura;
     digitalWrite(trigerA, LOW);
   }
-  x = sumLectura / 5;
+  x = sumLectura / sample;
   sensor1Value = (m * x) + b;
   Serial.println(F("voltaje 1 :"));
   Serial.print(sensor1Value);
 
   delay(read_sensor_delay);
-  dtostrf(sensor1Value, 4, 1, charVal);
+  dtostrf(sensor1Value+calibrateValue, 4, 1, charVal);
 }
 void sensor2()
 {
   int lectura2 = 0;
   float sensor2ValueSum = 0;
-  for (int i = 0; i < 5; i++)
+  for (int i = 0; i < sample; i++)
   {
     digitalWrite(trigerB, HIGH);
     delay(read_sensor_delay);
@@ -258,11 +265,13 @@ void sensor2()
     sensor2ValueSum += (0.05563 * lectura2) + 0.31267;
     digitalWrite(trigerB, LOW);
   }
-  sensor2Value = (sensor2ValueSum / 5) - 0.6;
+  sensor2Value = (sensor2ValueSum / sample) - 0.6;
   Serial.println(F("voltaje 2 "));
   Serial.println(lectura2);
   Serial.println(sensor2Value);
-
+  if(sensor2Value<0.5){
+    sensor2Value=0;
+  }
   delay(read_sensor_delay);
   dtostrf(sensor2Value, 4, 1, charVal2);
 }
@@ -387,6 +396,35 @@ void setup()
     Serial.println(F("eepromm 10:"));
     Serial.println(EEPROM.read(10));
   }
+  /**CALIBRATE EEPROM*/
+  if(EEPROM.read(50)!=255){
+    Serial.println("m or l?: ");
+    if(EEPROM.read(51)>0 && EEPROM.read(51) < 10){
+        Serial.print("Ya tenemos SIGNO:");
+        Serial.println((char)EEPROM.read(50));
+        Serial.print("Ya tenemos el VALOR a incrementar o decrementar!:");
+        Serial.print(EEPROM.read(51));
+        Serial.print("");
+        switch ((char)EEPROM.read(50)) {
+          case 'm':
+            calibrateValue=(EEPROM.read(51)*1)/10.0;  
+            Serial.println("Estoy en m");          
+            break;
+          case 'l':
+            calibrateValue=(EEPROM.read(51)*-1)/10.0;
+            
+            break;
+          default:
+            EEPROM.write(50, 255);
+            EEPROM.write(51, 255);
+            break;
+        }
+                
+    }else{
+        EEPROM.write(50, 255);
+        EEPROM.write(51, 255);
+      }
+  }
   delay(5000);
   ethconfig();
   tone(buzzer, 6000); // Send 1KHz sound signal...
@@ -503,7 +541,25 @@ void loop()
     Serial.println(F("----------------"));
 
     if (strncmp("GET /50", data, 7) == 0)
-    {
+    { 
+      if( (&data[8]=="=") && (&data[11]=="E") ){
+        Serial.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Calibrate");
+        
+        if(strncmp("m", &data[9], 1) == 0){
+          char c = data[10];
+          ActionValueByGet = c - '0';
+          EEPROM.write(50, 'm');
+          EEPROM.write(51, ActionValueByGet);
+          restart(1);                  
+        }
+        if(strncmp("l", &data[9], 1) == 0){
+          char c = data[10];
+          ActionValueByGet = c - '0';
+          EEPROM.write(50, 'l');
+          EEPROM.write(51, ActionValueByGet);
+          restart(1);
+        }
+      }
       ether.httpServerReply(homePagephone()); // send web page data
     }
     if (strncmp("GET /ON", data, 7) == 0)
@@ -520,8 +576,10 @@ void loop()
     }
     if (strncmp("GET /RST", data, 8) == 0)
     { //definir si es para version rele de estado solido o rele de bobina
+      EEPROM.write(50, 255);//RESET CALIBRATE
+      EEPROM.write(51, 255);//RESET CALIBRATE
       digitalWrite(releB, HIGH);
-      delay(500);
+      delay(250);
       digitalWrite(releB, LOW);
       EEPROM.write(6, 1);
       ether.httpServerReply(homePagephone()); // send web page data

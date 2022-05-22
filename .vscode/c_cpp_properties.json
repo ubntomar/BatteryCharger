@@ -3,7 +3,7 @@
         {
             "name": "Linux",
             "includePath": [
-                "${default}"
+                "/home/omar/Arduino/libraries/EtherCard/src"
             ],
             "compilerPath": "/usr/bin/gcc",
             "cStandard": "gnu11",
