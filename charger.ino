@@ -54,7 +54,7 @@ const char website[] PROGMEM = "www.google.com";
 const long interval = 300000; //(milliseconds)
 int read_sensor_delay = 4; 
 int sample=30;
-byte Ethernet::buffer[340]; //copy and pasted in agc.php    225
+byte Ethernet::buffer[300]; //copy and pasted in agc.php    225
 char myArray[0];
 static uint32_t timer;
 static uint32_t timer2;
@@ -83,7 +83,8 @@ int dstart = 0;
 int dlen = 0;
 int ActionValueByGet=0;
 float calibrateValue=0;
-
+char calibrateOpt=0;
+int requestStatus = 1;
 const char htmlHeaderphone[] PROGMEM =
     "HTTP/1.0 200 OK\r\n"
     "Content-Type: text/html\r\n"
@@ -279,11 +280,11 @@ static word homePagephone()
 { 
   sensor1();
   sensor2();
-  // releb_value = digitalRead(releB);
+  // releb_value = digitalRead(releB);  requestStatus
   bfill = ether.tcpOffset();
   bfill.emit_p(PSTR("$F"
-                   "{\"data\":{\"rele\":\"$D\",\"sensor1\":\"$S\",\"sensor2\":\"$S\"}} \r\n"),
-               htmlHeaderphone, digitalRead(MosfetControl), charVal, charVal2);
+                   "{\"data\":{\"status\":\"$D\",\"rele\":\"$D\",\"sensor1\":\"$S\",\"sensor2\":\"$S\",\"adj\":\"$D\",\"adjVal\":\"$D\"}} \r\n"),
+               htmlHeaderphone,requestStatus,digitalRead(MosfetControl), charVal, charVal2, calibrateOpt, ActionValueByGet);
   return bfill.position();
 }
 void restart(int setStatus)
@@ -406,13 +407,16 @@ void setup()
         Serial.print(EEPROM.read(51));
         Serial.print("");
         switch ((char)EEPROM.read(50)) {
-          case 'm':
-            calibrateValue=(EEPROM.read(51)*1)/10.0;  
-            Serial.println("Estoy en m");          
-            break;
           case 'l':
             calibrateValue=(EEPROM.read(51)*-1)/10.0;
-            
+            ActionValueByGet=EEPROM.read(51);
+            calibrateOpt=1;
+            break;
+          case 'm':
+            calibrateValue=(EEPROM.read(51)*1)/10.0;  
+            calibrateOpt=2;
+            ActionValueByGet=EEPROM.read(51);
+            Serial.println("Estoy en m");          
             break;
           default:
             EEPROM.write(50, 255);
@@ -540,20 +544,26 @@ void loop()
     Serial.println(data);
     Serial.println(F("----------------"));
 
-    if (strncmp("GET /50", data, 7) == 0)
+    if (strncmp("GET /5", data, 6) == 0)
     { 
-      if( (&data[8]=="=") && (&data[11]=="E") ){
+      Serial.println("->");
+      Serial.println(data[6]);
+      Serial.println("<-");
+      Serial.println(data[7]);
+      char opt=data[6];
+      char optVal=data[7];
+      if( (opt=='l') || (opt=='m') ){
         Serial.println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!Calibrate");
         
-        if(strncmp("m", &data[9], 1) == 0){
-          char c = data[10];
+        if(opt=='m'){
+          char c = optVal;
           ActionValueByGet = c - '0';
           EEPROM.write(50, 'm');
           EEPROM.write(51, ActionValueByGet);
           restart(1);                  
         }
-        if(strncmp("l", &data[9], 1) == 0){
-          char c = data[10];
+        if(opt=='l'){
+          char c = optVal;
           ActionValueByGet = c - '0';
           EEPROM.write(50, 'l');
           EEPROM.write(51, ActionValueByGet);
@@ -562,19 +572,19 @@ void loop()
       }
       ether.httpServerReply(homePagephone()); // send web page data
     }
-    if (strncmp("GET /ON", data, 7) == 0)
+    else if (strncmp("GET /ON", data, 7) == 0)
     {
       digitalWrite(MosfetControl, HIGH); //Normally opened Rele 5 volt-> ON  < Forcing ON status of rele >
       
       ether.httpServerReply(homePagephone()); // send web page data
     }
-    if (strncmp("GET /OFF", data, 8) == 0)
+    else if (strncmp("GET /OFF", data, 8) == 0)
     {
       
       digitalWrite(MosfetControl, LOW); 
       ether.httpServerReply(homePagephone()); // send web page data
     }
-    if (strncmp("GET /RST", data, 8) == 0)
+    else if (strncmp("GET /RST", data, 8) == 0)
     { //definir si es para version rele de estado solido o rele de bobina
       EEPROM.write(50, 255);//RESET CALIBRATE
       EEPROM.write(51, 255);//RESET CALIBRATE
@@ -585,11 +595,15 @@ void loop()
       ether.httpServerReply(homePagephone()); // send web page data
       restart(1);
     }
-    if (strncmp("GET /RSTNTW", data, 11) == 0)
+    else if (strncmp("GET /RSTNTW", data, 11) == 0)
     {
       // byte myip[] = {192, 168, 55, 249};
       // EEPROM.write(7, 1);
       // ethconfig();
+    }
+    else{
+      requestStatus=0;
+      ether.httpServerReply(homePagephone()); // send web page data
     }
     //correcion:/IP=IPBYTE3.IPBYTE4.GATEWAYBYTE4
     //   if (strncmp("GET /IP=", data, 8) == 0) // 055.250.254    /IP=SUBNETBYTE3.IPBYTE4.GATEWAYBYTE4  {--myip[2]--gwip[2]} {--myip[3]} {---gwip[3]}    192.168.55.249    example   55.249.001
@@ -608,7 +622,6 @@ void loop()
     //     }
     //     Serial.println("myipok:");
     //     Serial.println(myipok);
-
     //     int myipok2[2];
     //     char *p = myipok;
     //     char *str;
