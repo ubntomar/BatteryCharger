@@ -85,6 +85,7 @@ int ActionValueByGet=0;
 float calibrateValue=0;
 char calibrateOpt=0;
 int requestStatus = 1;
+int rstPending=0;
 const char htmlHeaderphone[] PROGMEM =
     "HTTP/1.0 200 OK\r\n"
     "Content-Type: text/html\r\n"
@@ -283,8 +284,8 @@ static word homePagephone()
   // releb_value = digitalRead(releB);  requestStatus
   bfill = ether.tcpOffset();
   bfill.emit_p(PSTR("$F"
-                   "{\"data\":{\"status\":\"$D\",\"rele\":\"$D\",\"sensor1\":\"$S\",\"sensor2\":\"$S\",\"adj\":\"$D\",\"adjVal\":\"$D\"}} \r\n"),
-               htmlHeaderphone,requestStatus,digitalRead(MosfetControl), charVal, charVal2, calibrateOpt, ActionValueByGet);
+                   "{\"data\":{\"status\":\"$D\",\"rele\":\"$D\",\"sensor1\":\"$S\",\"sensor2\":\"$S\",\"adj\":\"$D\",\"adjVal\":\"$D\",\"rstPending\":\"$D\"}} \r\n"),
+               htmlHeaderphone,requestStatus,digitalRead(MosfetControl), charVal, charVal2, calibrateOpt, ActionValueByGet,rstPending);
   return bfill.position();
 }
 void restart(int setStatus)
@@ -400,7 +401,7 @@ void setup()
   /**CALIBRATE EEPROM*/
   if(EEPROM.read(50)!=255){
     Serial.println("m or l?: ");
-    if(EEPROM.read(51)>0 && EEPROM.read(51) < 10){
+    if(EEPROM.read(51)>=0 && EEPROM.read(51) < 10){
         Serial.print("Ya tenemos SIGNO:");
         Serial.println((char)EEPROM.read(50));
         Serial.print("Ya tenemos el VALOR a incrementar o decrementar!:");
@@ -546,6 +547,7 @@ void loop()
 
     if (strncmp("GET /5", data, 6) == 0)
     { 
+      requestStatus=1;
       Serial.println("->");
       Serial.println(data[6]);
       Serial.println("<-");
@@ -558,19 +560,26 @@ void loop()
         if(opt=='m'){
           char c = optVal;
           ActionValueByGet = c - '0';
+          requestStatus=ActionValueByGet>=0&&ActionValueByGet<10?1:0;
+          if(requestStatus){
           EEPROM.write(50, 'm');
           EEPROM.write(51, ActionValueByGet);
-          restart(1);                  
+          rstPending=1;
+          }
         }
         if(opt=='l'){
           char c = optVal;
           ActionValueByGet = c - '0';
+          requestStatus=ActionValueByGet>=0&&ActionValueByGet<10?1:0;
+          if(requestStatus){
           EEPROM.write(50, 'l');
           EEPROM.write(51, ActionValueByGet);
-          restart(1);
+          rstPending=1;
+          }
         }
       }
       ether.httpServerReply(homePagephone()); // send web page data
+      if(rstPending)restart(1); 
     }
     else if (strncmp("GET /ON", data, 7) == 0)
     {
@@ -592,6 +601,7 @@ void loop()
       delay(250);
       digitalWrite(releB, LOW);
       EEPROM.write(6, 1);
+      rstPending=1;
       ether.httpServerReply(homePagephone()); // send web page data
       restart(1);
     }
