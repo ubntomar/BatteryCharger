@@ -12,13 +12,13 @@
 #define SYSTEM2 24
 #define MAC {0x74, 0x69, 0x69, 0x2D, 0x30, 0x3B}
 /////////////////////////////////////////////////////////////////////////
-// PIN Connections (Using Arduino UNO):
+// PIN Connections (Using Arduino UNO/NANO/MINI/PRO):
 //   VCC -   3.3V     ///
 //   GND -    GND     ///
-//   SCK - Pin 13     ///Ping 17 on chip
-//   SO  - Pin 12     ///Ping 16 on chip
-//   SI  - Pin 11     ///Ping 15 on chip
-//   CS  - Pin  8     ///Ping 12 on chip "!important:" for Atmega328P Cs=8 (My mistake! it should be Cs=10) => pin 12 on chip!
+//   SCK - Arduino Pin 13     ///Ping 17 on chip
+//   SO  - Arduino Pin 12     ///Ping 16 on chip
+//   SI  - Arduino Pin 11     ///Ping 15 on chip
+//   CS  - Arduino Pin 10(ping 14 en atmega328) /// legacy===Arduino pin 8 =>12 on chip "!important:" for Atmega328P (Cs=8..por error) (My mistake! it must be Cs=Arduino pin10(ping 14 en atmega))
 /////////////////////////////////////////////////////////////////////////
 // Default network config                                             //
 byte myip[] = {192, 168, 30, 254};   //
@@ -305,7 +305,7 @@ void ethconfig()
   Serial.println("Gw:");
   Serial.println(gwadd);
   ether.hisport = 80;
-  if (ether.begin(sizeof Ethernet::buffer, mymac, 8) == 0) //8 => SS=CS, pin  12 on Atmega 328P
+  if (ether.begin(sizeof Ethernet::buffer, mymac, 10) == 0) //8 => SS=CS, pin  12 on Atmega 328P     Nov 2022 lo paso a 10 q es el valor por defecto y equivale a
     Serial.println(F("Failed Ethernet  start"));
   Serial.println(F("probando ether.staticSetup"));
   if (ether.begin(sizeof Ethernet::buffer, mymac, 8) != 0)
