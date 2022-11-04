@@ -1,4 +1,3 @@
-
 //las direcciones ip se deben cambia en el setup y en la funcion verifica
 //
 #include <EtherCard.h> //Usa por defecto pin 10 de Atmega328 P, pero el diseño de ese pin est{a} sobre el pin 12 . En este momento se modifica la tarjeta pero se podr{i}a modificar la libreria.
@@ -33,48 +32,28 @@ byte netmask[] = {255, 255, 255, 0}; //
 //RA4(Ar y Encj60)->3-|      |-6->RA1(Input) -->Arduino->A5(Output)
 //                  4-|______|-5->RA2(Output)-->Arduino->A4(Input)(Interrupción)
 ////////////////////////////////////////////////////////////////////////
-char serial_temp[] = "9999";
 int reboot = 0;
 int releB = 4;         //SRS1
-int MosfetControl = 5; //D5 ,pin 9
-int acVoltajeLive = 7; //D7 ,pin 11
+int MosfetControl = 7; //D7 ,pin 11 //
 int sensorPin = A1;    //A1 , pin 24 -> sensor modulo de baterias 1 en A1
 int sensorPin2 = A0;   //A0 , pin 23 ->sensor modulo de baterias 2 en A0
 int ucclockin = A2;    //entrada de pulso de comando de micro pic12f629
 int buzzer = 6;
 int trigerA = 2; //OUTPUT activador para lectura sensor de voltaje
 int trigerB = 3; //OUTPUT activador para lectura sensor de voltaje
-int getreply = 0;
-int repeatstore = 0;
-int flagstore = 0;
-int getrequest = 0;
-int timeout_dns = 0;
 const char website[] PROGMEM = "www.google.com";
 #define REQUEST_RATE 900000   //1800000 milliseconds  --30 minutos
 const long interval = 300000; //(milliseconds)
 int read_sensor_delay = 4; 
 int sample=30;
 byte Ethernet::buffer[300]; //copy and pasted in agc.php    225
-char myArray[0];
 static uint32_t timer;
-static uint32_t timer2;
-static uint32_t timer3;
 unsigned long previousMillis = 0;
-int segs = 0;
-int contsegs = 0;
-int pass = 0;
 unsigned long time;
 BufferFiller bfill;
-int releb_value = 1;
-int relec_value = 1;
-int reled_value = 1;
-int relee_value = 1;
 char ipadd[16];
 char gwadd[16];
 char nmadd[16];
-char part1[4];
-char part2[4];
-char part3[3];
 float sensor1Value;
 float sensor2Value;
 char charVal[10];
@@ -95,7 +74,6 @@ const char htmlHeaderphone[] PROGMEM =
 //////START MELODY CONFIG
 /*
   Pacman Intro Theme
-  Connect a piezo buzzer or speaker to pin 11 or select a new pin.
   More songs available at https://github.com/robsoncouto/arduino-songs
                                               Robson Couto, 2019
 */
@@ -189,13 +167,7 @@ const char htmlHeaderphone[] PROGMEM =
 #define NOTE_D8 4699
 #define NOTE_DS8 4978
 #define REST 0
-// change this to make the song slower or faster
 int tempo = 105;
-// change this to whichever pin you want to use
-// notes of the moledy followed by the duration.
-// a 4 means a quarter note, 8 an eighteenth , 16 sixteenth, so on
-// !!negative numbers are used to represent dotted notes,
-// so -4 means a dotted quarter note, that is, a quarter plus an eighteenth!!
 int melody[] = {
     // Pacman
     // Score available at https://musescore.com/user/85429/scores/107109
@@ -206,10 +178,7 @@ int melody[] = {
     NOTE_B4, 16, NOTE_B5, 16, NOTE_FS5, 16, NOTE_DS5, 16, NOTE_B5, 32, //2
     NOTE_FS5, -16, NOTE_DS5, 8, NOTE_DS5, 32, NOTE_E5, 32, NOTE_F5, 32,
     NOTE_F5, 32, NOTE_FS5, 32, NOTE_G5, 32, NOTE_G5, 32, NOTE_GS5, 32, NOTE_A5, 16, NOTE_B5, 8};
-// sizeof gives the number of bytes, each int value is composed of two bytes (16 bits)
-// there are two values per note (pitch and duration), so for each note there are four bytes
 int notes = sizeof(melody) / sizeof(melody[0]) / 2;
-// this calculates the duration of a whole note in ms
 int wholenote = (60000 * 4) / tempo;
 int divider = 0, noteDuration = 0;
 /////  END OF MELODY CONFIG
@@ -281,7 +250,6 @@ static word homePagephone()
 { 
   sensor1();
   sensor2();
-  // releb_value = digitalRead(releB);  requestStatus
   bfill = ether.tcpOffset();
   bfill.emit_p(PSTR("$F"
                    "{\"data\":{\"status\":\"$D\",\"rele\":\"$D\",\"sensor1\":\"$S\",\"sensor2\":\"$S\",\"adj\":\"$D\",\"adjVal\":\"$D\",\"rstPending\":\"$D\"}} \r\n"),
@@ -330,7 +298,6 @@ void dnscheckup()
 
   else
   {
-    timeout_dns = 1;
     Serial.println(F("timeout dns.."));
   }
   Serial.println(F(".Saliendo...dnscheckup()"));
@@ -358,8 +325,6 @@ void setup()
   delay(1000);        // ...for 1 sec
   noTone(buzzer);     // Stop sound...
   time = millis();
-  timer2 = 0;
-  timer3 = 0;
   Serial.begin(9600);
   pinMode(trigerA, OUTPUT);
   pinMode(trigerB, OUTPUT);
@@ -369,8 +334,6 @@ void setup()
   pinMode(A3, OUTPUT);
   pinMode(0, OUTPUT);
   pinMode(1, OUTPUT);
-  pinMode(acVoltajeLive, INPUT);
-  digitalWrite(acVoltajeLive, LOW);
   digitalWrite(releB, EEPROM.read(1));
   pinMode(PCINT_PIN_A4, INPUT_PULLUP);
   PcInt::attachInterrupt(PCINT_PIN_A4, pinChanged, "Pin has changed to ", CHANGE);
@@ -447,10 +410,7 @@ void setup()
 //------------------------------------------------------------------------------------------------------
 void loop()
 {
-
-  //ether.persistTcpConnection(false);
   time = millis();
-  // Serial.println(time);
   if (time >= 3600000)
   {
     restart(1);
@@ -615,48 +575,6 @@ void loop()
       requestStatus=0;
       ether.httpServerReply(homePagephone()); // send web page data
     }
-    //correcion:/IP=IPBYTE3.IPBYTE4.GATEWAYBYTE4
-    //   if (strncmp("GET /IP=", data, 8) == 0) // 055.250.254    /IP=SUBNETBYTE3.IPBYTE4.GATEWAYBYTE4  {--myip[2]--gwip[2]} {--myip[3]} {---gwip[3]}    192.168.55.249    example   55.249.001
-    //   {
-    //     char myipok[] = "192.168.254";
-    //     Serial.println("begin:");
-    //     Serial.println(data[8]);
-    //     dstart = 8;
-    //     //start of replace
-    //     dlen = 11;
-    //     int j = -1;
-    //     for (int i = dstart; i < dstart + dlen; i++)
-    //     {
-    //       j += 1;
-    //       myipok[j] = data[i];
-    //     }
-    //     Serial.println("myipok:");
-    //     Serial.println(myipok);
-    //     int myipok2[2];
-    //     char *p = myipok;
-    //     char *str;
-    //     int i = -1;
-    //     int number;
-    //     while ((str = strtok_r(p, ".", &p)) != NULL)
-    //     {
-    //       i += 1;
-    //       Serial.println(F("ip recibida:::"));
-    //       Serial.println(str);
-    //       number = atoi(str);
-    //       myipok2[i] = number;
-    //       Serial.println(F("number::"));
-    //       Serial.println(number);
-    //       Serial.println(F("ip en array:::"));
-    //       Serial.println(myipok2[i]);
-    //     }
-    //     EEPROM.write(8, myipok2[0]);
-    //     EEPROM.write(9, myipok2[1]);
-    //     EEPROM.write(10, myipok2[2]);
-    //     EEPROM.write(7, 3);
-    //     ether.httpServerReply(homePagephone()); // send web page data
-    //     Serial.println(F("rest"));
-    //     restart(1);
-    //   }
-    // }
+    
   }
 }

@@ -1,6 +1,6 @@
 {
     "sketch": "v2/charger.ino",
-    "port": "/dev/ttyUSB0",
+    "port": "/dev/ttyUSB1",
     "configuration": "cpu=atmega328",
     "board": "arduino:avr:mini",
     "programmer": "arduino:avrispmkii",
