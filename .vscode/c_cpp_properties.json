@@ -7,7 +7,7 @@
             "compilerArgs": [],
             "intelliSenseMode": "linux-gcc-x64",
             "includePath": [
-                "/home/omar/Arduino/libraries/EtherCard-main/src",
+                "/home/omar/Arduino/libraries/EtherCard/src",
                 "/home/omar/Downloads/arduino-1.8.19-linux64/arduino-1.8.19/hardware/arduino/avr/cores/arduino",
                 "/home/omar/Downloads/arduino-1.8.19-linux64/arduino-1.8.19/hardware/arduino/avr/variants/eightanaloginputs",
                 "/home/omar/Downloads/arduino-1.8.19-linux64/arduino-1.8.19/hardware/arduino/avr/libraries/EEPROM/src",
@@ -37,7 +37,7 @@
             "includePath": [
                 "/home/omar/Downloads/arduino-1.8.19-linux64/arduino-1.8.19/hardware/arduino/avr/cores/arduino",
                 "/home/omar/Downloads/arduino-1.8.19-linux64/arduino-1.8.19/hardware/arduino/avr/variants/eightanaloginputs",
-                "/home/omar/Arduino/libraries/EtherCard-main/src",
+                "/home/omar/Arduino/libraries/EtherCard/src",
                 "/home/omar/Downloads/arduino-1.8.19-linux64/arduino-1.8.19/hardware/arduino/avr/libraries/EEPROM/src",
                 "/home/omar/Arduino/libraries/Yet_Another_Arduino_PcInt_Library/src",
                 "/home/omar/Downloads/arduino-1.8.19-linux64/arduino-1.8.19/hardware/tools/avr/lib/gcc/avr/7.3.0/include",
@@ -50,9 +50,9 @@
             "cStandard": "c11",
             "cppStandard": "c++11",
             "defines": [
-                "F_CPU=16000000L",
+                "F_CPU=8000000L",
                 "ARDUINO=10819",
-                "ARDUINO_AVR_MINI",
+                "ARDUINO_AVR_PRO",
                 "ARDUINO_ARCH_AVR",
                 "__DBL_MIN_EXP__=(-125)",
                 "__HQ_FBIT__=15",

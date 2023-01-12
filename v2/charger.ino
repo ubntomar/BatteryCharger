@@ -25,13 +25,7 @@ byte mymac[] = MAC;                  //
 byte gwip[] = {192, 168, 30, 1};     //
 byte static_dns[] = {8, 8, 8, 8};    //
 byte netmask[] = {255, 255, 255, 0}; //
-////////////////////////////////////////////////////////////////////////
-//                   Pic12f1822
-//                  1-|      |-8
-//                  2-|      |-7
-//RA4(Ar y Encj60)->3-|      |-6->RA1(Input) -->Arduino->A5(Output)
-//                  4-|______|-5->RA2(Output)-->Arduino->A4(Input)(Interrupción)
-////////////////////////////////////////////////////////////////////////
+
 int reboot = 0;
 int releB = 4;         //SRS1
 int MosfetControl = 7; //D7 ,pin 11 //
@@ -200,7 +194,7 @@ int divider = 0, noteDuration = 0;
 // "b= -0.5070422535211279"
 // "y= 12.169014084507042"
 //y=(0.05405405405405406 * x) + -0.16216216216216317                               /////
-
+void(* resetFunc) (void) = 0;  // declare reset fuction at address 0
 void sensor1()
 {
   int lectura = 0;
@@ -276,7 +270,7 @@ void ethconfig()
   if (ether.begin(sizeof Ethernet::buffer, mymac, 10) == 0) //8 => SS=CS, pin  12 on Atmega 328P     Nov 2022 lo paso a 10 q es el valor por defecto y equivale a
     Serial.println(F("Failed Ethernet  start"));
   Serial.println(F("probando ether.staticSetup"));
-  if (ether.begin(sizeof Ethernet::buffer, mymac, 8) != 0)
+  if (ether.begin(sizeof Ethernet::buffer, mymac, 10) != 0)
   {
     ether.staticSetup(myip, gwip, static_dns, netmask);
     Serial.println(F("probando dns"));
@@ -491,6 +485,7 @@ void loop()
         delay(noteDuration);
         noTone(buzzer);
       }
+      resetFunc(); //call reset
     }
   }
 
