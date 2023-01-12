@@ -3,9 +3,17 @@
 #include <EtherCard.h> //Usa por defecto pin 10 de Atmega328 P, pero el diseño de ese pin est{a} sobre el pin 12 . En este momento se modifica la tarjeta pero se podr{i}a modificar la libreria.
 #include <stdlib.h>    //Lo de arriba?Creo q ya no aplica por q se hace no por hardware sino por software
 #include <EEPROM.h>
-#include <YetAnotherPcInt.h>
-#define PCINT_PIN_A4 A4
-#define DEBUG 1
+
+#define VOLTS_IN_A0 A0   
+#define VOLTS_IN_A1 A1   
+#define TRIGER_TO_A0 A2 
+#define TRIGER_TO_A1 A3 
+#define SERIAL_RX 0
+#define SERIAL_TX 1
+
+#define SOFT_RESET 5   
+#define BUZZER 6
+#define PLUGED_DEVICE_CTL 7
 #define BATTERYSYSTEM 12
 #define SYSTEM1 12
 #define SYSTEM2 24
@@ -14,10 +22,10 @@
 // PIN Connections (Using Arduino UNO/NANO/MINI/PRO):
 //   VCC -   3.3V     ///
 //   GND -    GND     ///
-//   SCK - Arduino Pin 13     ///Ping 17 on chip
-//   SO  - Arduino Pin 12     ///Ping 16 on chip
-//   SI  - Arduino Pin 11     ///Ping 15 on chip
-//   CS  - Arduino Pin 10(ping 14 en atmega328) /// legacy===Arduino pin 8 =>12 on chip "!important:" for Atmega328P (Cs=8..por error) (My mistake! it must be Cs=Arduino pin10(ping 14 en atmega))
+//   SCK - [Arduino-Pin 13] ///Ping 17 on chip
+//   SO  - [Arduino-Pin 12] ///Ping 16 on chip
+//   SI  - [Arduino-Pin 11] ///Ping 15 on chip
+//   CS  - [Arduino-Pin 10] ///ping 14 on chip) Legacy===Arduino pin 8 =>12 on chip "!important:" for Atmega328P (Cs=8..por error) (My mistake! it must be Cs=Arduino pin10(ping 14 en atmega))
 /////////////////////////////////////////////////////////////////////////
 // Default network config                                             //
 byte myip[] = {192, 168, 30, 254};   //
@@ -27,21 +35,12 @@ byte static_dns[] = {8, 8, 8, 8};    //
 byte netmask[] = {255, 255, 255, 0}; //
 
 int reboot = 0;
-int releB = 4;         //SRS1
-int MosfetControl = 7; //D7 ,pin 11 //
-int sensorPin = A1;    //A1 , pin 24 -> sensor modulo de baterias 1 en A1
-int sensorPin2 = A0;   //A0 , pin 23 ->sensor modulo de baterias 2 en A0
-int ucclockin = A2;    //entrada de pulso de comando de micro pic12f629
-int buzzer = 6;
-int trigerA = 2; //OUTPUT activador para lectura sensor de voltaje
-int trigerB = 3; //OUTPUT activador para lectura sensor de voltaje
+
 const char website[] PROGMEM = "www.google.com";
-#define REQUEST_RATE 900000   //1800000 milliseconds  --30 minutos
 const long interval = 300000; //(milliseconds)
 int read_sensor_delay = 4; 
 int sample=30;
 byte Ethernet::buffer[300]; //copy and pasted in agc.php    225
-static uint32_t timer;
 unsigned long previousMillis = 0;
 unsigned long time;
 BufferFiller bfill;
@@ -204,11 +203,11 @@ void sensor1()
   double b = -0.5070422535211279;
   for (int i = 0; i < sample; i++)
   {
-    digitalWrite(trigerA, HIGH);
+    digitalWrite(TRIGER_TO_A0, HIGH);
     delay(read_sensor_delay);
-    lectura = analogRead(sensorPin);
+    lectura = analogRead(VOLTS_IN_A1);
     sumLectura += lectura;
-    digitalWrite(trigerA, LOW);
+    digitalWrite(TRIGER_TO_A0, LOW);
   }
   x = sumLectura / sample;
   sensor1Value = (m * x) + b;
@@ -224,11 +223,11 @@ void sensor2()
   float sensor2ValueSum = 0;
   for (int i = 0; i < sample; i++)
   {
-    digitalWrite(trigerB, HIGH);
+    digitalWrite(TRIGER_TO_A1, HIGH);
     delay(read_sensor_delay);
-    lectura2 = analogRead(sensorPin2);
+    lectura2 = analogRead(VOLTS_IN_A0);
     sensor2ValueSum += (0.05563 * lectura2) + 0.31267;
-    digitalWrite(trigerB, LOW);
+    digitalWrite(TRIGER_TO_A1, LOW);
   }
   sensor2Value = (sensor2ValueSum / sample) - 0.6;
   Serial.println(F("voltaje 2 "));
@@ -247,7 +246,7 @@ static word homePagephone()
   bfill = ether.tcpOffset();
   bfill.emit_p(PSTR("$F"
                    "{\"data\":{\"status\":\"$D\",\"rele\":\"$D\",\"sensor1\":\"$S\",\"sensor2\":\"$S\",\"adj\":\"$D\",\"adjVal\":\"$D\",\"rstPending\":\"$D\"}} \r\n"),
-               htmlHeaderphone,requestStatus,digitalRead(MosfetControl), charVal, charVal2, calibrateOpt, ActionValueByGet,rstPending);
+               htmlHeaderphone,requestStatus,digitalRead(PLUGED_DEVICE_CTL), charVal, charVal2, calibrateOpt, ActionValueByGet,rstPending);
   return bfill.position();
 }
 void restart(int setStatus)
@@ -296,43 +295,23 @@ void dnscheckup()
   }
   Serial.println(F(".Saliendo...dnscheckup()"));
 }
-void pinChanged(const char *message, bool pinstate)
-{
-  Serial.print(message);
-  Serial.println(pinstate ? "HIGH" : "LOW");
-  if (reboot == 0)
-  {
-    digitalWrite(A5, HIGH); //Pic must wait 5 ms before read this value
-  }
-  else
-  {
-    digitalWrite(A5, LOW);
-    delay(7000);
-    reboot = 0;
-  }
-}
+
 void setup()
 {
-  pinMode(A5, OUTPUT);
-  digitalWrite(A5, HIGH);
-  tone(buzzer, 1000); // Send 1KHz sound signal...
+  
+  tone(BUZZER, 1000); // Send 1KHz sound signal...
   delay(1000);        // ...for 1 sec
-  noTone(buzzer);     // Stop sound...
+  noTone(BUZZER);     // Stop sound...
   time = millis();
   Serial.begin(9600);
-  pinMode(trigerA, OUTPUT);
-  pinMode(trigerB, OUTPUT);
-  pinMode(releB, OUTPUT);
-  pinMode(MosfetControl, OUTPUT);
-  pinMode(ucclockin, INPUT);
-  pinMode(A3, OUTPUT);
-  pinMode(0, OUTPUT);
-  pinMode(1, OUTPUT);
-  digitalWrite(releB, EEPROM.read(1));
-  pinMode(PCINT_PIN_A4, INPUT_PULLUP);
-  PcInt::attachInterrupt(PCINT_PIN_A4, pinChanged, "Pin has changed to ", CHANGE);
-  timer = -REQUEST_RATE; // start timing out right away
-  Serial.println(F("eeprommm rest value:."));
+  pinMode(TRIGER_TO_A0, OUTPUT);
+  pinMode(TRIGER_TO_A1, OUTPUT);
+  pinMode(PLUGED_DEVICE_CTL, OUTPUT);
+  pinMode(SERIAL_TX, OUTPUT);
+
+
+
+  Serial.println(F("EEPROM rest value: "));
   Serial.println(EEPROM.read(7));
   if (EEPROM.read(7) == 1)
   {
@@ -389,17 +368,17 @@ void setup()
   }
   delay(5000);
   ethconfig();
-  tone(buzzer, 6000); // Send 1KHz sound signal...
+  tone(BUZZER, 6000); // Send 1KHz sound signal...
   delay(500);         // ...for 1 sec
-  noTone(buzzer);     // Stop sound...
+  noTone(BUZZER);     // Stop sound...
   delay(500);
-  tone(buzzer, 5000); // Send 1KHz sound signal...
+  tone(BUZZER, 5000); // Send 1KHz sound signal...
   delay(100);         // ...for 1 sec
-  noTone(buzzer);     // Stop sound...
+  noTone(BUZZER);     // Stop sound...
   delay(100);
-  tone(buzzer, 5000); // Send 1KHz sound signal...
+  tone(BUZZER, 5000); // Send 1KHz sound signal...
   delay(100);         // ...for 1 sec
-  noTone(buzzer);     // Stop sound...
+  noTone(BUZZER);     // Stop sound...
 }
 //------------------------------------------------------------------------------------------------------
 void loop()
@@ -421,12 +400,12 @@ void loop()
     if (BATTERYSYSTEM == SYSTEM1)
     {
       Serial.println("*****************************");
-      if (digitalRead(MosfetControl))
+      if (digitalRead(PLUGED_DEVICE_CTL))
       {
-        digitalWrite(MosfetControl, LOW); //turn off the battery charger
+        digitalWrite(PLUGED_DEVICE_CTL, LOW); //turn off the battery charger
         delay(5000);
         sensor1();
-        digitalWrite(MosfetControl, HIGH); //turn on the battery charger
+        digitalWrite(PLUGED_DEVICE_CTL, HIGH); //turn on the battery charger
         voltajeBatterySource = sensor1Value;
       }
       else
@@ -442,7 +421,7 @@ void loop()
 
     if (voltajeBatterySource < minVoltaje)
     {
-      digitalWrite(MosfetControl, HIGH); //Normally opened Rele 5 volt-> ON
+      digitalWrite(PLUGED_DEVICE_CTL, HIGH); //Normally opened Rele 5 volt-> ON
       Serial.print("Voltaje menor a");
       Serial.println(minVoltaje);
       Serial.println("charging battery...");
@@ -452,11 +431,11 @@ void loop()
       Serial.print("Voltaje Intermedio:");
       Serial.print(voltajeBatterySource, 2);
       Serial.println("...");
-      digitalWrite(MosfetControl, HIGH); //Normally opened Rele 5 volt-> ON  < Forcing ON status of rele >
+      digitalWrite(PLUGED_DEVICE_CTL, HIGH); //Normally opened Rele 5 volt-> ON  < Forcing ON status of rele >
     }
     if (voltajeBatterySource > maxVoltaje)
     {
-      digitalWrite(MosfetControl, LOW); //Normaly opened rele 0 volts->OFF
+      digitalWrite(PLUGED_DEVICE_CTL, LOW); //Normaly opened rele 0 volts->OFF
       Serial.print("Voltaje mayor a");
       Serial.println(maxVoltaje, 2);
       Serial.println(" Charging battery stop");
@@ -481,9 +460,9 @@ void loop()
           noteDuration = (wholenote) / abs(divider);
           noteDuration *= 1.5; // increases the duration in half for dotted notes
         }
-        tone(buzzer, melody[thisNote], noteDuration * 0.9);
+        tone(BUZZER, melody[thisNote], noteDuration * 0.9);
         delay(noteDuration);
-        noTone(buzzer);
+        noTone(BUZZER);
       }
       resetFunc(); //call reset
     }
@@ -538,23 +517,20 @@ void loop()
     }
     else if (strncmp("GET /ON", data, 7) == 0)
     {
-      digitalWrite(MosfetControl, HIGH); //Normally opened Rele 5 volt-> ON  < Forcing ON status of rele >
+      digitalWrite(PLUGED_DEVICE_CTL, HIGH); //Normally opened Rele 5 volt-> ON  < Forcing ON status of rele >
       
       ether.httpServerReply(homePagephone()); // send web page data
     }
     else if (strncmp("GET /OFF", data, 8) == 0)
     {
       
-      digitalWrite(MosfetControl, LOW); 
+      digitalWrite(PLUGED_DEVICE_CTL, LOW); 
       ether.httpServerReply(homePagephone()); // send web page data
     }
     else if (strncmp("GET /RST", data, 8) == 0)
     { //definir si es para version rele de estado solido o rele de bobina
       EEPROM.write(50, 255);//RESET CALIBRATE
       EEPROM.write(51, 255);//RESET CALIBRATE
-      digitalWrite(releB, HIGH);
-      delay(250);
-      digitalWrite(releB, LOW);
       EEPROM.write(6, 1);
       rstPending=1;
       ether.httpServerReply(homePagephone()); // send web page data
