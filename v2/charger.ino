@@ -1,7 +1,7 @@
 //las direcciones ip se deben cambia en el setup y en la funcion verifica
 //
 #include <EtherCard.h> //Usa por defecto pin 10 de Atmega328 P, pero el diseño de ese pin est{a} sobre el pin 12 . En este momento se modifica la tarjeta pero se podr{i}a modificar la libreria.
-#include <stdlib.h>    //Lo de arriba?Creo q ya no aplica por q se hace no por hardware sino por software
+#include <stdlib.h>    
 #include <EEPROM.h>
 
 #define VOLTS_IN_A0 A0   
@@ -14,6 +14,11 @@
 #define SOFT_RESET 5   
 #define BUZZER 6
 #define PLUGED_DEVICE_CTL 7
+#define SAMPLING_DELAY_MS 2 
+#define SAMPLE_QUANTITY 10
+#define CALIBRATE_BY_SOFTWARE_VOLT_VALUE 25
+#define CALIBRATE_BY_SOFTWARE_M 0.037606837606837605
+#define CALIBRATE_BY_SOFTWARE_B 0.14871794871794908
 #define BATTERYSYSTEM 12
 #define SYSTEM1 12
 #define SYSTEM2 24
@@ -38,23 +43,23 @@ int reboot = 0;
 
 const char website[] PROGMEM = "www.google.com";
 const long interval = 300000; //(milliseconds)
-int read_sensor_delay = 4; 
-int sample=30;
-byte Ethernet::buffer[300]; //copy and pasted in agc.php    225
+byte Ethernet::buffer[400];
 unsigned long previousMillis = 0;
 unsigned long time;
 BufferFiller bfill;
 char ipadd[16];
 char gwadd[16];
 char nmadd[16];
-float sensor1Value;
-float sensor2Value;
-char charVal[10];
-char charVal2[10]; //temporarily holds data from vals
+float sensor1CalculatedValue=0;
+int sensor1SampleRawValue=0;
+int sensor2SampleRawValue=0;
+float sensor2CalculatedValue=0;
+char sensor1ToArrayValue[10];
+char sensor2ToArrayValue[10]; //temporarily holds data from vals
 int dstart = 0;
 int dlen = 0;
 int ActionValueByGet=0;
-float calibrateValue=0;
+float calibrateValueFromEEPROM=0;
 char calibrateOpt=0;
 int requestStatus = 1;
 int rstPending=0;
@@ -189,55 +194,61 @@ int divider = 0, noteDuration = 0;
 // console.log("m= "+m)
 // console.log("b= "+b)
 // console.log("y= "+y)
+
 // "m= 0.056338028169014086"
 // "b= -0.5070422535211279"
 // "y= 12.169014084507042"
 //y=(0.05405405405405406 * x) + -0.16216216216216317                               /////
-void(* resetFunc) (void) = 0;  // declare reset fuction at address 0
+
 void sensor1()
 {
   int lectura = 0;
   int sumLectura = 0;
   float x = 0;
-  double m = 0.056338028169014086;
-  double b = -0.5070422535211279;
-  for (int i = 0; i < sample; i++)
+  for (int i = 0; i < SAMPLE_QUANTITY; i++)
   {
-    digitalWrite(TRIGER_TO_A0, HIGH);
-    delay(read_sensor_delay);
-    lectura = analogRead(VOLTS_IN_A1);
+    digitalWrite(TRIGER_TO_A0, LOW);
+    delay(SAMPLING_DELAY_MS);
+    lectura = analogRead(VOLTS_IN_A0);
     sumLectura += lectura;
     digitalWrite(TRIGER_TO_A0, LOW);
+    delay(SAMPLING_DELAY_MS);
   }
-  x = sumLectura / sample;
-  sensor1Value = (m * x) + b;
+  double m = CALIBRATE_BY_SOFTWARE_M;
+  double b = CALIBRATE_BY_SOFTWARE_B;
+  x = sumLectura / SAMPLE_QUANTITY;
+  sensor1CalculatedValue = (m * x) + b;
+  sensor1CalculatedValue=sensor1CalculatedValue<CALIBRATE_BY_SOFTWARE_VOLT_VALUE?sensor1CalculatedValue-0.1:sensor1CalculatedValue+0;
+  sensor1SampleRawValue=x;
   Serial.println(F("voltaje 1 :"));
-  Serial.print(sensor1Value);
+  Serial.print(sensor1CalculatedValue);
 
-  delay(read_sensor_delay);
-  dtostrf(sensor1Value+calibrateValue, 4, 1, charVal);
+  dtostrf(sensor1CalculatedValue+calibrateValueFromEEPROM, 4, 1, sensor1ToArrayValue);
 }
 void sensor2()
 {
-  int lectura2 = 0;
-  float sensor2ValueSum = 0;
-  for (int i = 0; i < sample; i++)
+  int lectura = 0;
+  int sumLectura = 0;
+  float x = 0;
+  for (int i = 0; i < SAMPLE_QUANTITY; i++)
   {
-    digitalWrite(TRIGER_TO_A1, HIGH);
-    delay(read_sensor_delay);
-    lectura2 = analogRead(VOLTS_IN_A0);
-    sensor2ValueSum += (0.05563 * lectura2) + 0.31267;
     digitalWrite(TRIGER_TO_A1, LOW);
+    delay(SAMPLING_DELAY_MS);
+    lectura = analogRead(VOLTS_IN_A1);
+    sumLectura += lectura;
+    digitalWrite(TRIGER_TO_A1, LOW);
+    delay(SAMPLING_DELAY_MS);
   }
-  sensor2Value = (sensor2ValueSum / sample) - 0.6;
-  Serial.println(F("voltaje 2 "));
-  Serial.println(lectura2);
-  Serial.println(sensor2Value);
-  if(sensor2Value<0.5){
-    sensor2Value=0;
-  }
-  delay(read_sensor_delay);
-  dtostrf(sensor2Value, 4, 1, charVal2);
+  double m = CALIBRATE_BY_SOFTWARE_M;
+  double b = CALIBRATE_BY_SOFTWARE_B;
+  x = sumLectura / SAMPLE_QUANTITY;
+  sensor2CalculatedValue = (m * x) + b;
+  sensor2CalculatedValue=sensor2CalculatedValue<CALIBRATE_BY_SOFTWARE_VOLT_VALUE?sensor2CalculatedValue-0.1:sensor2CalculatedValue+0;
+  sensor2SampleRawValue=x;
+  Serial.println(F("voltaje 2 :"));
+  Serial.print(sensor2CalculatedValue);
+
+  dtostrf(sensor2CalculatedValue+calibrateValueFromEEPROM, 4, 1, sensor2ToArrayValue);
 }
 static word homePagephone()
 { 
@@ -245,8 +256,8 @@ static word homePagephone()
   sensor2();
   bfill = ether.tcpOffset();
   bfill.emit_p(PSTR("$F"
-                   "{\"data\":{\"status\":\"$D\",\"rele\":\"$D\",\"sensor1\":\"$S\",\"sensor2\":\"$S\",\"adj\":\"$D\",\"adjVal\":\"$D\",\"rstPending\":\"$D\"}} \r\n"),
-               htmlHeaderphone,requestStatus,digitalRead(PLUGED_DEVICE_CTL), charVal, charVal2, calibrateOpt, ActionValueByGet,rstPending);
+                   "{\"data\":{\"status\":\"$D\",\"rele\":\"$D\",\"sensor1\":\"$S\",\"sensor2\":\"$S\",\"adjustedOptl1m2\":\"$D\",\"adjustedVal\":\"$D\",\"rstPending\":\"$D\",\"sensor1rawValue\":\"$D\",\"sensor2rawValue\":\"$D\"}} \r\n"),
+               htmlHeaderphone,requestStatus,digitalRead(PLUGED_DEVICE_CTL), sensor1ToArrayValue, sensor2ToArrayValue, calibrateOpt, ActionValueByGet,rstPending,sensor1SampleRawValue,sensor2SampleRawValue);
   return bfill.position();
 }
 void restart(int setStatus)
@@ -266,7 +277,7 @@ void ethconfig()
   Serial.println("Gw:");
   Serial.println(gwadd);
   ether.hisport = 80;
-  if (ether.begin(sizeof Ethernet::buffer, mymac, 10) == 0) //8 => SS=CS, pin  12 on Atmega 328P     Nov 2022 lo paso a 10 q es el valor por defecto y equivale a
+  if (ether.begin(sizeof Ethernet::buffer, mymac, 10) == 0) //8 => SS=CS, pin  12 on Atmega 328P     Nov 2022 lo paso a 10 q es el valor por defecto.
     Serial.println(F("Failed Ethernet  start"));
   Serial.println(F("probando ether.staticSetup"));
   if (ether.begin(sizeof Ethernet::buffer, mymac, 10) != 0)
@@ -295,6 +306,8 @@ void dnscheckup()
   }
   Serial.println(F(".Saliendo...dnscheckup()"));
 }
+
+void(* resetFunc) (void) = 0;  // declare reset fuction at address 0
 
 void setup()
 {
@@ -345,12 +358,12 @@ void setup()
         Serial.print("");
         switch ((char)EEPROM.read(50)) {
           case 'l':
-            calibrateValue=(EEPROM.read(51)*-1)/10.0;
+            calibrateValueFromEEPROM=(EEPROM.read(51)*-1)/10.0;
             ActionValueByGet=EEPROM.read(51);
             calibrateOpt=1;
             break;
           case 'm':
-            calibrateValue=(EEPROM.read(51)*1)/10.0;  
+            calibrateValueFromEEPROM=(EEPROM.read(51)*1)/10.0;  
             calibrateOpt=2;
             ActionValueByGet=EEPROM.read(51);
             Serial.println("Estoy en m");          
@@ -366,6 +379,7 @@ void setup()
         EEPROM.write(51, 255);
       }
   }
+  
   delay(5000);
   ethconfig();
   tone(BUZZER, 6000); // Send 1KHz sound signal...
@@ -386,7 +400,7 @@ void loop()
   time = millis();
   if (time >= 3600000)
   {
-    restart(1);
+    //restart(1);
   }
 
   unsigned long currentMillis = millis();
@@ -406,12 +420,12 @@ void loop()
         delay(5000);
         sensor1();
         digitalWrite(PLUGED_DEVICE_CTL, HIGH); //turn on the battery charger
-        voltajeBatterySource = sensor1Value;
+        voltajeBatterySource = sensor1CalculatedValue;
       }
       else
       {
         sensor1();
-        voltajeBatterySource = sensor1Value;
+        voltajeBatterySource = sensor1CalculatedValue;
       }
       Serial.println("*****************************");
       minVoltaje = 12.5;
@@ -441,7 +455,7 @@ void loop()
       Serial.println(" Charging battery stop");
     }
 
-    if (sensor2Value >= 4)
+    if (sensor2CalculatedValue >= 4)
     {
       Serial.println("Si hay energia electrica");
     }
@@ -464,7 +478,7 @@ void loop()
         delay(noteDuration);
         noTone(BUZZER);
       }
-      resetFunc(); //call reset
+      //resetFunc(); //call reset
     }
   }
 
