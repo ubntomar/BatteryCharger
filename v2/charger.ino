@@ -22,14 +22,18 @@
 #define BATTERYSYSTEM 12
 #define SYSTEM1 12
 #define SYSTEM2 24
+
+#define DEVICE_LOCATION "MONTECRISTO"
+#define DEVICE_SERIAL 115
 #define MAC {0x74, 0x69, 0x69, 0x2D, 0x30, 0x3B}
 
 #define VPS_SERVER_IP "146.71.79.111"
 #define TCP_PORT_FOR_HTTP_API 8013
-#define PATH "volts"
+#define TOPIC_PATH "volts"
 const char websiteTarget[] PROGMEM = "myvpsserveraccount.com";
 const long POSTrequestInterval = 15000; //(milliseconds)
 unsigned long previousMillisForPOSTrequest = 0;
+Stash stash;
 /////////////////////////////////////////////////////////////////////////
 // PIN Connections (Using Arduino UNO/NANO/MINI/PRO):
 //   VCC -   3.3V     ///
@@ -52,7 +56,6 @@ const char website[] PROGMEM = "www.google.com";
 const long interval = 300000; //(milliseconds)  300000=>5 minutes 
 byte Ethernet::buffer[400];
 unsigned long previousMillis = 0;
-unsigned long time;
 BufferFiller bfill;
 char ipadd[16];
 char gwadd[16];
@@ -138,10 +141,10 @@ void sensor1()
   sensor1CalculatedValue = (m * x) + b;
   sensor1CalculatedValue=sensor1CalculatedValue<=CALIBRATE_BY_SOFTWARE_VOLT_VALUE?sensor1CalculatedValue-0.15:sensor1CalculatedValue-0.3;
   sensor1SampleRawValue=x;
-  Serial.println(F("voltaje 1 :"));
-  Serial.print(sensor1CalculatedValue);
-
-  dtostrf(sensor1CalculatedValue+calibrateValueFromEEPROM, 4, 1, sensor1ToArrayValue);
+  //Serial.println(F("voltaje 1 :"));
+  //Serial.print(sensor1CalculatedValue);
+  sensor1CalculatedValue+=calibrateValueFromEEPROM;
+  dtostrf(sensor1CalculatedValue, 4, 1, sensor1ToArrayValue);
 }
 void sensor2()
 {
@@ -163,24 +166,10 @@ void sensor2()
   sensor2CalculatedValue = (m * x) + b;
   sensor2CalculatedValue=sensor2CalculatedValue<=CALIBRATE_BY_SOFTWARE_VOLT_VALUE?sensor2CalculatedValue-0.15:sensor2CalculatedValue-0.3;
   sensor2SampleRawValue=x;
-  Serial.println(F("voltaje 2 :"));
-  Serial.print(sensor2CalculatedValue);
-
-  dtostrf(sensor2CalculatedValue+calibrateValueFromEEPROM, 4, 1, sensor2ToArrayValue);
-}
-static word homePagephone()
-{ 
-  sensor1();
-  sensor2();
-  bfill = ether.tcpOffset();
-  bfill.emit_p(PSTR("$F"
-                   "{\"data\":{\"status\":\"$D\",\"rele\":\"$D\",\"sensor1\":\"$S\",\"sensor2\":\"$S\",\"adjustedOptl1m2\":\"$D\",\"adjustedVal\":\"$D\",\"rstPending\":\"$D\",\"sensor1rawValue\":\"$D\",\"sensor2rawValue\":\"$D\"}} \r\n"),
-               htmlHeaderGETresponse,requestStatus,digitalRead(PLUGED_DEVICE_CTL), sensor1ToArrayValue, sensor2ToArrayValue, calibrateOpt, ActionValueByGet,rstPending,sensor1SampleRawValue,sensor2SampleRawValue);
-  return bfill.position();
-}
-void restart(int setStatus)
-{
-  reboot = setStatus;
+  //Serial.println(F("voltaje 2 :"));
+  //Serial.print(sensor2CalculatedValue);
+  sensor2CalculatedValue+=calibrateValueFromEEPROM;
+  dtostrf(sensor2CalculatedValue, 4, 1, sensor2ToArrayValue);
 }
 void ethconfig()
 {
@@ -225,6 +214,16 @@ void dnscheckup()
   }
   Serial.println(F(".Saliendo...dnscheckup()"));
 }
+static word homePagephone()
+{ 
+  sensor1();
+  sensor2();
+  bfill = ether.tcpOffset();
+  bfill.emit_p(PSTR("$F"
+                   "{\"data\":{\"status\":\"$D\",\"rele\":\"$D\",\"sensor1\":\"$S\",\"sensor2\":\"$S\",\"adjustedOptl1m2\":\"$D\",\"adjustedVal\":\"$D\",\"rstPending\":\"$D\",\"sensor1rawValue\":\"$D\",\"sensor2rawValue\":\"$D\"}} \r\n"),
+               htmlHeaderGETresponse,requestStatus,digitalRead(PLUGED_DEVICE_CTL), sensor1ToArrayValue, sensor2ToArrayValue, calibrateOpt, ActionValueByGet,rstPending,sensor1SampleRawValue,sensor2SampleRawValue);
+  return bfill.position();
+}
 
 void(* resetFunc) (void) = 0;  // declare reset fuction at address 0
 
@@ -234,7 +233,6 @@ void setup()
   tone(BUZZER, 1000); // Send 1KHz sound signal...
   delay(1000);        // ...for 1 sec
   noTone(BUZZER);     // Stop sound...
-  time = millis();
   Serial.begin(9600);
   pinMode(TRIGER_TO_A0, OUTPUT);
   pinMode(TRIGER_TO_A1, OUTPUT);
@@ -251,7 +249,7 @@ void setup()
     EEPROM.write(9, 249);
     EEPROM.write(10, 1);
     EEPROM.write(7, 0);
-    restart(1);
+    resetFunc();
   }
   if (EEPROM.read(7) == 3) //    kevin leandro
   {
@@ -316,13 +314,12 @@ void setup()
 //------------------------------------------------------------------------------------------------------
 void loop()
 {
-  time = millis();
-  if (time >= 3600000)
+  unsigned long currentMillis = millis();
+  if (currentMillis >= 3600000)
   {
-    //restart(1);
+    resetFunc();
   }
 
-  unsigned long currentMillis = millis();
   if (currentMillis - previousMillis >= interval)
   {
     previousMillis = currentMillis;
@@ -376,7 +373,7 @@ void loop()
 
     if (sensor2CalculatedValue >= 4)
     {
-      Serial.println("Si hay energia electrica");
+      ;//Serial.println("Si hay energia electrica");
     }
     else
     {
@@ -401,8 +398,7 @@ void loop()
     }
   }
 
-  word len = ether.packetReceive(); // go receive new packets
-  word pos = ether.packetLoop(len); // respond to incoming
+  word pos = ether.packetLoop(ether.packetReceive()); // respond to incoming
   if (pos)
   { // check if valid tcp data is received
     // data received from ethernet
@@ -446,7 +442,7 @@ void loop()
         }
       }
       ether.httpServerReply(homePagephone()); // send web page data
-      if(rstPending)restart(1); 
+      if(rstPending)resetFunc(); 
     }
     else if (strncmp("GET /ON", data, 7) == 0)
     {
@@ -467,7 +463,7 @@ void loop()
       EEPROM.write(6, 1);
       rstPending=1;
       ether.httpServerReply(homePagephone()); // send web page data
-      restart(1);
+      resetFunc();
     }
     else if (strncmp("GET /RSTNTW", data, 11) == 0)
     {
@@ -485,13 +481,35 @@ void loop()
 //POST REQUEST EVERY 15 SECONDS
 if (currentMillis - previousMillisForPOSTrequest >= POSTrequestInterval){
     previousMillisForPOSTrequest = currentMillis;
+    Serial.println("...post...");
+    sensor1();
+    String sensor1Val = String(sensor1CalculatedValue);
+    sensor2();
+    String sensor2Val = String(sensor2CalculatedValue);
+    String deviceControlStatus = digitalRead(PLUGED_DEVICE_CTL)?String("ON"):String("OFF");
+    byte sd = stash.create();
+    stash.print("location=");
+    stash.print(DEVICE_LOCATION);
+    stash.print("&");
+    stash.print("serial=");
+    stash.print(DEVICE_SERIAL);
+    stash.print("&");
+    stash.print("sensor1Val=");
+    stash.print(sensor1Val);
+    stash.print("&");
+    stash.print("sensor2Val=");
+    stash.print(sensor2Val);
+    stash.print("&");
+    stash.print("deviceControlStatus=");
+    stash.print(deviceControlStatus);
+    stash.save();
     Stash::prepare(PSTR("POST /$F HTTP/1.1" "\r\n"
       "Host: $F" "\r\n"
-      "Content-Length: 27" "\r\n"
+      "Content-Length: $D" "\r\n"
       "Content-Type: application/x-www-form-urlencoded" "\r\n"
       "\r\n"
-      "field1=value1&field2=value2"),
-  PSTR(PATH), websiteTarget);
-  ether.tcpSend();
+      "$H"),
+      PSTR(TOPIC_PATH),websiteTarget,stash.size(),sd);
+    ether.tcpSend();
   }
 }
