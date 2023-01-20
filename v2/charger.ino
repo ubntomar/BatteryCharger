@@ -3,7 +3,7 @@
 #include <EtherCard.h> //Usa por defecto pin 10 de Atmega328 P, pero el diseño de ese pin est{a} sobre el pin 12 . En este momento se modifica la tarjeta pero se podr{i}a modificar la libreria.
 #include <stdlib.h>    
 #include <EEPROM.h>
-
+#include "melody.h"
 #define VOLTS_IN_A0 A0   
 #define VOLTS_IN_A1 A1   
 #define TRIGER_TO_A0 A2 
@@ -23,6 +23,13 @@
 #define SYSTEM1 12
 #define SYSTEM2 24
 #define MAC {0x74, 0x69, 0x69, 0x2D, 0x30, 0x3B}
+
+#define VPS_SERVER_IP "146.71.79.111"
+#define TCP_PORT_FOR_HTTP_API 8013
+#define PATH "volts"
+const char websiteTarget[] PROGMEM = "myvpsserveraccount.com";
+const long POSTrequestInterval = 15000; //(milliseconds)
+unsigned long previousMillisForPOSTrequest = 0;
 /////////////////////////////////////////////////////////////////////////
 // PIN Connections (Using Arduino UNO/NANO/MINI/PRO):
 //   VCC -   3.3V     ///
@@ -33,16 +40,16 @@
 //   CS  - [Arduino-Pin 10] ///ping 14 on chip) Legacy===Arduino pin 8 =>12 on chip "!important:" for Atmega328P (Cs=8..por error) (My mistake! it must be Cs=Arduino pin10(ping 14 en atmega))
 /////////////////////////////////////////////////////////////////////////
 // Default network config                                             //
-byte myip[] = {192, 168, 30, 254};   //
 byte mymac[] = MAC;                  //
-byte gwip[] = {192, 168, 30, 1};     //
+byte myip[] = {192, 168, 254, 114};   //
+byte gwip[] = {192, 168, 254, 1};     //
 byte static_dns[] = {8, 8, 8, 8};    //
 byte netmask[] = {255, 255, 255, 0}; //
 
 int reboot = 0;
 
 const char website[] PROGMEM = "www.google.com";
-const long interval = 300000; //(milliseconds)
+const long interval = 300000; //(milliseconds)  300000=>5 minutes 
 byte Ethernet::buffer[400];
 unsigned long previousMillis = 0;
 unsigned long time;
@@ -63,7 +70,7 @@ float calibrateValueFromEEPROM=0;
 char calibrateOpt=0;
 int requestStatus = 1;
 int rstPending=0;
-const char htmlHeaderphone[] PROGMEM =
+const char htmlHeaderGETresponse[] PROGMEM =
     "HTTP/1.0 200 OK\r\n"
     "Content-Type: text/html\r\n"
     "Pragma: no-cache\r\n"
@@ -75,96 +82,7 @@ const char htmlHeaderphone[] PROGMEM =
   More songs available at https://github.com/robsoncouto/arduino-songs
                                               Robson Couto, 2019
 */
-#define NOTE_B0 31
-#define NOTE_C1 33
-#define NOTE_CS1 35
-#define NOTE_D1 37
-#define NOTE_DS1 39
-#define NOTE_E1 41
-#define NOTE_F1 44
-#define NOTE_FS1 46
-#define NOTE_G1 49
-#define NOTE_GS1 52
-#define NOTE_A1 55
-#define NOTE_AS1 58
-#define NOTE_B1 62
-#define NOTE_C2 65
-#define NOTE_CS2 69
-#define NOTE_D2 73
-#define NOTE_DS2 78
-#define NOTE_E2 82
-#define NOTE_F2 87
-#define NOTE_FS2 93
-#define NOTE_G2 98
-#define NOTE_GS2 104
-#define NOTE_A2 110
-#define NOTE_AS2 117
-#define NOTE_B2 123
-#define NOTE_C3 131
-#define NOTE_CS3 139
-#define NOTE_D3 147
-#define NOTE_DS3 156
-#define NOTE_E3 165
-#define NOTE_F3 175
-#define NOTE_FS3 185
-#define NOTE_G3 196
-#define NOTE_GS3 208
-#define NOTE_A3 220
-#define NOTE_AS3 233
-#define NOTE_B3 247
-#define NOTE_C4 262
-#define NOTE_CS4 277
-#define NOTE_D4 294
-#define NOTE_DS4 311
-#define NOTE_E4 330
-#define NOTE_F4 349
-#define NOTE_FS4 370
-#define NOTE_G4 392
-#define NOTE_GS4 415
-#define NOTE_A4 440
-#define NOTE_AS4 466
-#define NOTE_B4 494
-#define NOTE_C5 523
-#define NOTE_CS5 554
-#define NOTE_D5 587
-#define NOTE_DS5 622
-#define NOTE_E5 659
-#define NOTE_F5 698
-#define NOTE_FS5 740
-#define NOTE_G5 784
-#define NOTE_GS5 831
-#define NOTE_A5 880
-#define NOTE_AS5 932
-#define NOTE_B5 988
-#define NOTE_C6 1047
-#define NOTE_CS6 1109
-#define NOTE_D6 1175
-#define NOTE_DS6 1245
-#define NOTE_E6 1319
-#define NOTE_F6 1397
-#define NOTE_FS6 1480
-#define NOTE_G6 1568
-#define NOTE_GS6 1661
-#define NOTE_A6 1760
-#define NOTE_AS6 1865
-#define NOTE_B6 1976
-#define NOTE_C7 2093
-#define NOTE_CS7 2217
-#define NOTE_D7 2349
-#define NOTE_DS7 2489
-#define NOTE_E7 2637
-#define NOTE_F7 2794
-#define NOTE_FS7 2960
-#define NOTE_G7 3136
-#define NOTE_GS7 3322
-#define NOTE_A7 3520
-#define NOTE_AS7 3729
-#define NOTE_B7 3951
-#define NOTE_C8 4186
-#define NOTE_CS8 4435
-#define NOTE_D8 4699
-#define NOTE_DS8 4978
-#define REST 0
+
 int tempo = 105;
 int melody[] = {
     // Pacman
@@ -218,7 +136,7 @@ void sensor1()
   double b = CALIBRATE_BY_SOFTWARE_B;
   x = sumLectura / SAMPLE_QUANTITY;
   sensor1CalculatedValue = (m * x) + b;
-  sensor1CalculatedValue=sensor1CalculatedValue<CALIBRATE_BY_SOFTWARE_VOLT_VALUE?sensor1CalculatedValue-0.1:sensor1CalculatedValue+0;
+  sensor1CalculatedValue=sensor1CalculatedValue<=CALIBRATE_BY_SOFTWARE_VOLT_VALUE?sensor1CalculatedValue-0.15:sensor1CalculatedValue-0.3;
   sensor1SampleRawValue=x;
   Serial.println(F("voltaje 1 :"));
   Serial.print(sensor1CalculatedValue);
@@ -243,7 +161,7 @@ void sensor2()
   double b = CALIBRATE_BY_SOFTWARE_B;
   x = sumLectura / SAMPLE_QUANTITY;
   sensor2CalculatedValue = (m * x) + b;
-  sensor2CalculatedValue=sensor2CalculatedValue<CALIBRATE_BY_SOFTWARE_VOLT_VALUE?sensor2CalculatedValue-0.1:sensor2CalculatedValue+0;
+  sensor2CalculatedValue=sensor2CalculatedValue<=CALIBRATE_BY_SOFTWARE_VOLT_VALUE?sensor2CalculatedValue-0.15:sensor2CalculatedValue-0.3;
   sensor2SampleRawValue=x;
   Serial.println(F("voltaje 2 :"));
   Serial.print(sensor2CalculatedValue);
@@ -257,7 +175,7 @@ static word homePagephone()
   bfill = ether.tcpOffset();
   bfill.emit_p(PSTR("$F"
                    "{\"data\":{\"status\":\"$D\",\"rele\":\"$D\",\"sensor1\":\"$S\",\"sensor2\":\"$S\",\"adjustedOptl1m2\":\"$D\",\"adjustedVal\":\"$D\",\"rstPending\":\"$D\",\"sensor1rawValue\":\"$D\",\"sensor2rawValue\":\"$D\"}} \r\n"),
-               htmlHeaderphone,requestStatus,digitalRead(PLUGED_DEVICE_CTL), sensor1ToArrayValue, sensor2ToArrayValue, calibrateOpt, ActionValueByGet,rstPending,sensor1SampleRawValue,sensor2SampleRawValue);
+               htmlHeaderGETresponse,requestStatus,digitalRead(PLUGED_DEVICE_CTL), sensor1ToArrayValue, sensor2ToArrayValue, calibrateOpt, ActionValueByGet,rstPending,sensor1SampleRawValue,sensor2SampleRawValue);
   return bfill.position();
 }
 void restart(int setStatus)
@@ -268,15 +186,15 @@ void ethconfig()
 {
 
   sprintf(ipadd, "%u.%u.%u.%u", myip[0], myip[1], myip[2], myip[3]); //char ipadd[16];
-  Serial.println("Ip:");
+  //Serial.println("Ip:");
   Serial.println(ipadd);
   sprintf(nmadd, "%u.%u.%u.%u", netmask[0], netmask[1], netmask[2], netmask[3]); //char ipadd[16];
-  Serial.println("netMask:");
+  //Serial.println("netMask:");
   Serial.println(nmadd);
   sprintf(gwadd, "%u.%u.%u.%u", gwip[0], gwip[1], gwip[2], gwip[3]); //char ipadd[16];
-  Serial.println("Gw:");
+  //Serial.println("Gw:");
   Serial.println(gwadd);
-  ether.hisport = 80;
+  ether.hisport = TCP_PORT_FOR_HTTP_API;
   if (ether.begin(sizeof Ethernet::buffer, mymac, 10) == 0) //8 => SS=CS, pin  12 on Atmega 328P     Nov 2022 lo paso a 10 q es el valor por defecto.
     Serial.println(F("Failed Ethernet  start"));
   Serial.println(F("probando ether.staticSetup"));
@@ -285,9 +203,10 @@ void ethconfig()
     ether.staticSetup(myip, gwip, static_dns, netmask);
     Serial.println(F("probando dns"));
   }
-  delay(1000); //prueba de desbloqueo
-  dnscheckup();
+  delay(100); //prueba de desbloqueo
+  //dnscheckup();
   Serial.println("DNS Checked.");
+  ether.parseIp (ether.hisip, "146.71.79.111");//VPS_SERVER_IP
 }
 void dnscheckup()
 {
@@ -413,7 +332,7 @@ void loop()
     float voltajeBatterySource = 0;
     if (BATTERYSYSTEM == SYSTEM1)
     {
-      Serial.println("*****************************");
+      //Serial.println("*****************************");
       if (digitalRead(PLUGED_DEVICE_CTL))
       {
         digitalWrite(PLUGED_DEVICE_CTL, LOW); //turn off the battery charger
@@ -427,7 +346,7 @@ void loop()
         sensor1();
         voltajeBatterySource = sensor1CalculatedValue;
       }
-      Serial.println("*****************************");
+      //Serial.println("*****************************");
       minVoltaje = 12.5;
       maxVoltaje = 13.2;
       pwnChargeVolt = 254; //160
@@ -561,5 +480,18 @@ void loop()
       ether.httpServerReply(homePagephone()); // send web page data
     }
     
+  }
+
+//POST REQUEST EVERY 15 SECONDS
+if (currentMillis - previousMillisForPOSTrequest >= POSTrequestInterval){
+    previousMillisForPOSTrequest = currentMillis;
+    Stash::prepare(PSTR("POST /$F HTTP/1.1" "\r\n"
+      "Host: $F" "\r\n"
+      "Content-Length: 27" "\r\n"
+      "Content-Type: application/x-www-form-urlencoded" "\r\n"
+      "\r\n"
+      "field1=value1&field2=value2"),
+  PSTR(PATH), websiteTarget);
+  ether.tcpSend();
   }
 }
