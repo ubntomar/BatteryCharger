@@ -1,9 +1,8 @@
-//las direcciones ip se deben cambia en el setup y en la funcion verifica
-//
-#include <EtherCard.h> //Usa por defecto pin 10 de Atmega328 P, pero el diseño de ese pin est{a} sobre el pin 12 . En este momento se modifica la tarjeta pero se podr{i}a modificar la libreria.
+#include <EtherCard.h>
 #include <stdlib.h>    
 #include <EEPROM.h>
 #include "melody.h"
+
 #define VOLTS_IN_A0 A0   
 #define VOLTS_IN_A1 A1   
 #define TRIGER_TO_A0 A2 
@@ -34,6 +33,8 @@ const char websiteTarget[] PROGMEM = "myvpsserveraccount.com";
 const long POSTrequestInterval = 15000; //(milliseconds)
 unsigned long previousMillisForPOSTrequest = 0;
 Stash stash;
+
+
 /////////////////////////////////////////////////////////////////////////
 // PIN Connections (Using Arduino UNO/NANO/MINI/PRO):
 //   VCC -   3.3V     ///
@@ -43,41 +44,38 @@ Stash stash;
 //   SI  - [Arduino-Pin 11] ///Ping 15 on chip
 //   CS  - [Arduino-Pin 10] ///ping 14 on chip) Legacy===Arduino pin 8 =>12 on chip "!important:" for Atmega328P (Cs=8..por error) (My mistake! it must be Cs=Arduino pin10(ping 14 en atmega))
 /////////////////////////////////////////////////////////////////////////
-// Default network config                                             //
-byte mymac[] = MAC;                  //
-byte myip[] = {192, 168, 254, 114};   //
-byte gwip[] = {192, 168, 254, 1};     //
-byte static_dns[] = {8, 8, 8, 8};    //
-byte netmask[] = {255, 255, 255, 0}; //
 
-int reboot = 0;
-
-const char website[] PROGMEM = "www.google.com";
-const long interval = 300000; //(milliseconds)  300000=>5 minutes 
-byte Ethernet::buffer[400];
-unsigned long previousMillis = 0;
-BufferFiller bfill;
+// Network && Ethernet config.                                             
+byte mymac[] = MAC;                  
+byte myip[] = {192, 168, 254, 114};   
+byte gwip[] = {192, 168, 254, 1};     
+byte static_dns[] = {8, 8, 8, 8};    
+byte netmask[] = {255, 255, 255, 0}; 
 char ipadd[16];
-char gwadd[16];
 char nmadd[16];
+char gwadd[16];
+byte Ethernet::buffer[400];
+BufferFiller bfill;
+const char htmlHeaderGETresponse[] PROGMEM =
+    "HTTP/1.0 200 OK\r\n"
+    "Content-Type: text/html\r\n"
+    "Pragma: no-cache\r\n"
+    "\r\n";
+
+
+const long intervalForBatteryTasks = 300000; //(milliseconds)  300000=>5 minutes 
+unsigned long previousMillis = 0;
 float sensor1CalculatedValue=0;
 int sensor1SampleRawValue=0;
 int sensor2SampleRawValue=0;
 float sensor2CalculatedValue=0;
 char sensor1ToArrayValue[10];
 char sensor2ToArrayValue[10]; //temporarily holds data from vals
-int dstart = 0;
-int dlen = 0;
 int ActionValueByGet=0;
 float calibrateValueFromEEPROM=0;
 char calibrateOpt=0;
 int requestStatus = 1;
 int rstPending=0;
-const char htmlHeaderGETresponse[] PROGMEM =
-    "HTTP/1.0 200 OK\r\n"
-    "Content-Type: text/html\r\n"
-    "Pragma: no-cache\r\n"
-    "\r\n";
 
 //////START MELODY CONFIG
 /*
@@ -141,8 +139,6 @@ void sensor1()
   sensor1CalculatedValue = (m * x) + b;
   sensor1CalculatedValue=sensor1CalculatedValue<=CALIBRATE_BY_SOFTWARE_VOLT_VALUE?sensor1CalculatedValue-0.15:sensor1CalculatedValue-0.3;
   sensor1SampleRawValue=x;
-  //Serial.println(F("voltaje 1 :"));
-  //Serial.print(sensor1CalculatedValue);
   sensor1CalculatedValue+=calibrateValueFromEEPROM;
   dtostrf(sensor1CalculatedValue, 4, 1, sensor1ToArrayValue);
 }
@@ -166,8 +162,6 @@ void sensor2()
   sensor2CalculatedValue = (m * x) + b;
   sensor2CalculatedValue=sensor2CalculatedValue<=CALIBRATE_BY_SOFTWARE_VOLT_VALUE?sensor2CalculatedValue-0.15:sensor2CalculatedValue-0.3;
   sensor2SampleRawValue=x;
-  //Serial.println(F("voltaje 2 :"));
-  //Serial.print(sensor2CalculatedValue);
   sensor2CalculatedValue+=calibrateValueFromEEPROM;
   dtostrf(sensor2CalculatedValue, 4, 1, sensor2ToArrayValue);
 }
@@ -193,27 +187,10 @@ void ethconfig()
     Serial.println(F("probando dns"));
   }
   delay(100); //prueba de desbloqueo
-  //dnscheckup();
   Serial.println("DNS Checked.");
   ether.parseIp (ether.hisip, "146.71.79.111");//VPS_SERVER_IP
 }
-void dnscheckup()
-{
-  Serial.println(F("..entrando...dnscheckup().probando DNS..."));
-  if (ether.dnsLookup(website))
 
-    while (ether.clientWaitingGw())
-    {
-      ether.packetLoop(ether.packetReceive());
-      Serial.println("dns. ok...");
-    }
-
-  else
-  {
-    Serial.println(F("timeout dns.."));
-  }
-  Serial.println(F(".Saliendo...dnscheckup()"));
-}
 static word homePagephone()
 { 
   sensor1();
@@ -320,7 +297,7 @@ void loop()
     resetFunc();
   }
 
-  if (currentMillis - previousMillis >= interval)
+  if (currentMillis - previousMillis >= intervalForBatteryTasks)
   {
     previousMillis = currentMillis;
     float minVoltaje = 0;
@@ -483,22 +460,22 @@ if (currentMillis - previousMillisForPOSTrequest >= POSTrequestInterval){
     previousMillisForPOSTrequest = currentMillis;
     Serial.println("...post...");
     sensor1();
-    String sensor1Val = String(sensor1CalculatedValue);
+    //String sensor1Val = String(sensor1CalculatedValue);
     sensor2();
-    String sensor2Val = String(sensor2CalculatedValue);
+    //String sensor2Val = String(sensor2CalculatedValue);
     String deviceControlStatus = digitalRead(PLUGED_DEVICE_CTL)?String("ON"):String("OFF");
     byte sd = stash.create();
-    stash.print("location=");
+    stash.print("deviceLocation=");
     stash.print(DEVICE_LOCATION);
     stash.print("&");
     stash.print("serial=");
     stash.print(DEVICE_SERIAL);
     stash.print("&");
     stash.print("sensor1Val=");
-    stash.print(sensor1Val);
+    stash.print(sensor1CalculatedValue);
     stash.print("&");
     stash.print("sensor2Val=");
-    stash.print(sensor2Val);
+    stash.print(sensor2CalculatedValue);
     stash.print("&");
     stash.print("deviceControlStatus=");
     stash.print(deviceControlStatus);
