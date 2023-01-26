@@ -26,15 +26,40 @@
 #define DEVICE_SERIAL 115
 #define MAC {0x74, 0x69, 0x69, 0x2D, 0x30, 0x3B}
 
-#define VPS_SERVER_IP "146.71.79.111"
+
+#define DELAY_BEFORE_READ_BATTERY 100
+const long POSTrequestInterval = 7000; //(milliseconds)
+const long intervalForBatteryTasks = 60000; //(milliseconds)  300000=>5 minutes 
+
+
+#define VPS_SERVER_IP "146.71.79.111"ethconfig
 #define TCP_PORT_FOR_HTTP_API 8013
 #define TOPIC_PATH "volts"
 const char websiteTarget[] PROGMEM = "myvpsserveraccount.com";
-const long POSTrequestInterval = 15000; //(milliseconds)
 unsigned long previousMillisForPOSTrequest = 0;
 Stash stash;
 
+// Network && Ethernet config.    
 
+static byte tcpReplySession;
+byte responseToPreviusLocalPostRequest=0;
+
+byte mymac[] = MAC;                  
+byte myip[] = {192, 168, 21, 253};   
+byte netmask[] = {255, 255, 255, 0}; 
+byte gwip[] = {192, 168, 21, 1};     
+byte static_dns[] = {8, 8, 8, 8};    
+byte Ethernet::buffer[400];
+BufferFiller bfill;
+char ipadd[16];
+char nmadd[16];
+char gwadd[16];
+const char htmlHeaderGETresponse[] PROGMEM =
+    "HTTP/1.0 200 OK\r\n"
+    "Content-Type: text/html\r\n"
+    "Pragma: no-cache\r\n"
+    "\r\n";
+const char website[] PROGMEM = "www.google.com";
 /////////////////////////////////////////////////////////////////////////
 // PIN Connections (Using Arduino UNO/NANO/MINI/PRO):
 //   VCC -   3.3V     ///
@@ -45,25 +70,8 @@ Stash stash;
 //   CS  - [Arduino-Pin 10] ///ping 14 on chip) Legacy===Arduino pin 8 =>12 on chip "!important:" for Atmega328P (Cs=8..por error) (My mistake! it must be Cs=Arduino pin10(ping 14 en atmega))
 /////////////////////////////////////////////////////////////////////////
 
-// Network && Ethernet config.                                             
-byte mymac[] = MAC;                  
-byte myip[] = {192, 168, 254, 114};   
-byte gwip[] = {192, 168, 254, 1};     
-byte static_dns[] = {8, 8, 8, 8};    
-byte netmask[] = {255, 255, 255, 0}; 
-char ipadd[16];
-char nmadd[16];
-char gwadd[16];
-byte Ethernet::buffer[400];
-BufferFiller bfill;
-const char htmlHeaderGETresponse[] PROGMEM =
-    "HTTP/1.0 200 OK\r\n"
-    "Content-Type: text/html\r\n"
-    "Pragma: no-cache\r\n"
-    "\r\n";
 
 
-const long intervalForBatteryTasks = 300000; //(milliseconds)  300000=>5 minutes 
 unsigned long previousMillis = 0;
 float sensor1CalculatedValue=0;
 int sensor1SampleRawValue=0;
@@ -98,7 +106,7 @@ int melody[] = {
 int notes = sizeof(melody) / sizeof(melody[0]) / 2;
 int wholenote = (60000 * 4) / tempo;
 int divider = 0, noteDuration = 0;
-/////  END OF MELODY CONFIG
+
 // ---------------------JAVASCRIPT------------------------      ///
 //m=(y2-y1)/(x2-x1)
 // let x1=222.0
@@ -167,28 +175,14 @@ void sensor2()
 }
 void ethconfig()
 {
-
   sprintf(ipadd, "%u.%u.%u.%u", myip[0], myip[1], myip[2], myip[3]); //char ipadd[16];
-  //Serial.println("Ip:");
-  Serial.println(ipadd);
   sprintf(nmadd, "%u.%u.%u.%u", netmask[0], netmask[1], netmask[2], netmask[3]); //char ipadd[16];
-  //Serial.println("netMask:");
-  Serial.println(nmadd);
   sprintf(gwadd, "%u.%u.%u.%u", gwip[0], gwip[1], gwip[2], gwip[3]); //char ipadd[16];
-  //Serial.println("Gw:");
-  Serial.println(gwadd);
   ether.hisport = TCP_PORT_FOR_HTTP_API;
-  if (ether.begin(sizeof Ethernet::buffer, mymac, 10) == 0) //8 => SS=CS, pin  12 on Atmega 328P     Nov 2022 lo paso a 10 q es el valor por defecto.
-    Serial.println(F("Failed Ethernet  start"));
-  Serial.println(F("probando ether.staticSetup"));
-  if (ether.begin(sizeof Ethernet::buffer, mymac, 10) != 0)
-  {
+  if (ether.begin(sizeof Ethernet::buffer, mymac, 10) != 0){
     ether.staticSetup(myip, gwip, static_dns, netmask);
-    Serial.println(F("probando dns"));
+    ether.parseIp (ether.hisip, "146.71.79.111");//VPS_SERVER_IP
   }
-  delay(100); //prueba de desbloqueo
-  Serial.println("DNS Checked.");
-  ether.parseIp (ether.hisip, "146.71.79.111");//VPS_SERVER_IP
 }
 
 static word homePagephone()
@@ -204,6 +198,13 @@ static word homePagephone()
 
 void(* resetFunc) (void) = 0;  // declare reset fuction at address 0
 
+// void resetENC28j60(){
+//   digitalWrite(SOFT_RESET, LOW);
+//   delay(50);
+//   digitalWrite(SOFT_RESET, HIGH);
+//   delay(50);
+// }
+
 void setup()
 {
   
@@ -215,6 +216,9 @@ void setup()
   pinMode(TRIGER_TO_A1, OUTPUT);
   pinMode(PLUGED_DEVICE_CTL, OUTPUT);
   pinMode(SERIAL_TX, OUTPUT);
+  pinMode(SOFT_RESET, INPUT_PULLUP);
+  pinMode(SOFT_RESET, OUTPUT);
+  digitalWrite(SOFT_RESET, HIGH);
 
 
 
@@ -291,6 +295,23 @@ void setup()
 //------------------------------------------------------------------------------------------------------
 void loop()
 {
+  word pos = ether.packetLoop(ether.packetReceive());
+  const char* reply = ether.tcpReply(tcpReplySession);
+  if (reply != 0) {//Dec 0     Hex 00     NULL
+    //for(int i = 0; i < strlen(reply) - 189; i++) (String actualIp;)actualIp+ = actualIp + reply[187 + i];
+    responseToPreviusLocalPostRequest=1;
+    
+    Serial.println(reply[226]);//HTTP response= 218 characters + 9 newlines (\n) = 227 characteres. First in index 0 and last in index 226. last character=payload.   
+    if(reply[226]=='3') {
+      Serial.println("PLUGED_DEVICE_CTL ON");
+      digitalWrite(PLUGED_DEVICE_CTL, HIGH);
+    }
+    if(reply[226]=='2') {
+      Serial.println("PLUGED_DEVICE_CTL OFF");
+      digitalWrite(PLUGED_DEVICE_CTL, LOW);
+    }
+  }
+
   unsigned long currentMillis = millis();
   if (currentMillis >= 3600000)
   {
@@ -298,7 +319,12 @@ void loop()
   }
 
   if (currentMillis - previousMillis >= intervalForBatteryTasks)
-  {
+  { 
+    if (!responseToPreviusLocalPostRequest)//ether.dnsLookup(website)
+        if(ether.dnsLookup(website)){
+          resetFunc();
+        }
+    responseToPreviusLocalPostRequest=0;    
     previousMillis = currentMillis;
     float minVoltaje = 0;
     float maxVoltaje = 0;
@@ -306,11 +332,10 @@ void loop()
     float voltajeBatterySource = 0;
     if (BATTERYSYSTEM == SYSTEM1)
     {
-      //Serial.println("*****************************");
       if (digitalRead(PLUGED_DEVICE_CTL))
       {
         digitalWrite(PLUGED_DEVICE_CTL, LOW); //turn off the battery charger
-        delay(5000);
+        delay(DELAY_BEFORE_READ_BATTERY);
         sensor1();
         digitalWrite(PLUGED_DEVICE_CTL, HIGH); //turn on the battery charger
         voltajeBatterySource = sensor1CalculatedValue;
@@ -320,7 +345,6 @@ void loop()
         sensor1();
         voltajeBatterySource = sensor1CalculatedValue;
       }
-      //Serial.println("*****************************");
       minVoltaje = 12.5;
       maxVoltaje = 13.2;
       pwnChargeVolt = 254; //160
@@ -345,7 +369,7 @@ void loop()
       digitalWrite(PLUGED_DEVICE_CTL, LOW); //Normaly opened rele 0 volts->OFF
       Serial.print("Voltaje mayor a");
       Serial.println(maxVoltaje, 2);
-      Serial.println(" Charging battery stop");
+      Serial.println(" Charging battery stop PLUGED_DEVICE_CTL, LOW");
     }
 
     if (sensor2CalculatedValue >= 4)
@@ -365,19 +389,18 @@ void loop()
         else if (divider < 0)
         {
           noteDuration = (wholenote) / abs(divider);
-          noteDuration *= 1.5; // increases the duration in half for dotted notes
+          noteDuration *= 1.0; // increases the duration in half for dotted notes
         }
-        tone(BUZZER, melody[thisNote], noteDuration * 0.9);
+        tone(BUZZER, melody[thisNote], noteDuration * 0.5);
         delay(noteDuration);
         noTone(BUZZER);
       }
-      //resetFunc(); //call reset
     }
   }
-
-  word pos = ether.packetLoop(ether.packetReceive()); // respond to incoming
-  if (pos)
-  { // check if valid tcp data is received
+  
+  if (pos){ 
+    
+    // check if valid tcp data is received
     // data received from ethernet
     char *data = (char *)Ethernet::buffer + pos;
     Serial.println(F("----------------"));
@@ -446,7 +469,7 @@ void loop()
     {
       // byte myip[] = {192, 168, 55, 249};
       // EEPROM.write(7, 1);
-      // ethconfig();
+      ethconfig();
     }
     else{
       requestStatus=0;
@@ -455,14 +478,12 @@ void loop()
     
   }
 
-//POST REQUEST EVERY 15 SECONDS
+//POST REQUEST EVERY XX SECONDS
 if (currentMillis - previousMillisForPOSTrequest >= POSTrequestInterval){
     previousMillisForPOSTrequest = currentMillis;
-    Serial.println("...post...");
+    Serial.println("post");
     sensor1();
-    //String sensor1Val = String(sensor1CalculatedValue);
     sensor2();
-    //String sensor2Val = String(sensor2CalculatedValue);
     String deviceControlStatus = digitalRead(PLUGED_DEVICE_CTL)?String("ON"):String("OFF");
     byte sd = stash.create();
     stash.print("deviceLocation=");
@@ -487,6 +508,6 @@ if (currentMillis - previousMillisForPOSTrequest >= POSTrequestInterval){
       "\r\n"
       "$H"),
       PSTR(TOPIC_PATH),websiteTarget,stash.size(),sd);
-    ether.tcpSend();
+    tcpReplySession =ether.tcpSend();
   }
 }
