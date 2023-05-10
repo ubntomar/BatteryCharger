@@ -1,7 +1,7 @@
 #include <EtherCard.h>
 #include <stdlib.h>    
 #include <EEPROM.h>
-#include "melody.h"
+#include "mqttMelody.h"
 
 #define VOLTS_IN_A0 A0   
 #define VOLTS_IN_A1 A1   
@@ -10,6 +10,7 @@
 #define SERIAL_RX 0
 #define SERIAL_TX 1
 
+#define DEVICE_RESET_ITSELF 3600000
 #define SOFT_RESET 5   
 #define BUZZER 6
 #define PLUGED_DEVICE_CTL 7
@@ -22,18 +23,17 @@
 #define SYSTEM1 12
 #define SYSTEM2 24
 
-#define DEVICE_LOCATION "MONTECRISTO"
+#define DEVICE_LOCATION "RETIRO"
 #define DEVICE_SERIAL 115
 #define MAC {0x74, 0x69, 0x69, 0x2D, 0x30, 0x3B}
 
 
 #define DELAY_BEFORE_READ_BATTERY 100
 const long POSTrequestInterval = 7000; //(milliseconds)
-const long intervalForBatteryTasks = 60000; //(milliseconds)  300000=>5 minutes 
+const long intervalTimeForBatteryTasks = 60000; //(milliseconds)  300000=>5 minutes 
 
 
-#define VPS_SERVER_IP "146.71.79.111"ethconfig
-#define TCP_PORT_FOR_HTTP_API 8013
+#define VPS_SERVER_IP "146.71.79.111"
 #define TOPIC_PATH "volts"
 const char websiteTarget[] PROGMEM = "myvpsserveraccount.com";
 unsigned long previousMillisForPOSTrequest = 0;
@@ -45,9 +45,14 @@ static byte tcpReplySession;
 byte responseToPreviusLocalPostRequest=0;
 
 byte mymac[] = MAC;                  
-byte myip[] = {192, 168, 21, 253};   
+#define TCP_PORT_FOR_HTTP_API 8013
+#define SET_NETWORK_TO_DEFAULT_IP 1
+#define USE_MYIP_ARRAY_IP_ADDRESS 0
+#define MUST_USE_IP_FROM_EEPROM 3
+#define EEPROM_INDEX_CONFIG 2
+byte myip[] = {192, 168, 254, 254}; 
 byte netmask[] = {255, 255, 255, 0}; 
-byte gwip[] = {192, 168, 21, 1};     
+byte gwip[] = {192, 168, 254, 1};     
 byte static_dns[] = {8, 8, 8, 8};    
 byte Ethernet::buffer[400];
 BufferFiller bfill;
@@ -183,6 +188,9 @@ void ethconfig()
     ether.staticSetup(myip, gwip, static_dns, netmask);
     ether.parseIp (ether.hisip, "146.71.79.111");//VPS_SERVER_IP
   }
+  ether.printIp("IP:  ", ether.myip);
+  ether.printIp("GW:  ", ether.gwip);
+  ether.printIp("DNS: ", ether.dnsip);
 }
 
 static word homePagephone()
@@ -198,19 +206,9 @@ static word homePagephone()
 
 void(* resetFunc) (void) = 0;  // declare reset fuction at address 0
 
-// void resetENC28j60(){
-//   digitalWrite(SOFT_RESET, LOW);
-//   delay(50);
-//   digitalWrite(SOFT_RESET, HIGH);
-//   delay(50);
-// }
-
 void setup()
 {
-  
-  tone(BUZZER, 1000); // Send 1KHz sound signal...
-  delay(1000);        // ...for 1 sec
-  noTone(BUZZER);     // Stop sound...
+  delay(1500);
   Serial.begin(9600);
   pinMode(TRIGER_TO_A0, OUTPUT);
   pinMode(TRIGER_TO_A1, OUTPUT);
@@ -220,30 +218,24 @@ void setup()
   pinMode(SOFT_RESET, OUTPUT);
   digitalWrite(SOFT_RESET, HIGH);
 
-
-
-  Serial.println(F("EEPROM rest value: "));
-  Serial.println(EEPROM.read(7));
-  if (EEPROM.read(7) == 1)
+  Serial.println(EEPROM.read(EEPROM_INDEX_CONFIG));
+  
+  if (EEPROM.read(EEPROM_INDEX_CONFIG)==1)//192.168.254.20
   {
-    EEPROM.write(8, 55);
-    EEPROM.write(9, 249);
-    EEPROM.write(10, 1);
-    EEPROM.write(7, 0);
-    resetFunc();
+    EEPROM.write(8,254);
+    EEPROM.write(9,20);
+    EEPROM.write(10,1);
+    Serial.println("eeprom EEPROM_INDEX_CONFIG a 0");
+    EEPROM.write(EEPROM_INDEX_CONFIG,3);
   }
-  if (EEPROM.read(7) == 3) //    kevin leandro
+  if (EEPROM.read(EEPROM_INDEX_CONFIG)==3) 
   {
-    myip[2] = EEPROM.read(8);
-    gwip[2] = EEPROM.read(8);
-    myip[3] = EEPROM.read(9);
-    gwip[3] = EEPROM.read(10);
-    Serial.println(F("eepromm 8:"));
-    Serial.println(EEPROM.read(8));
-    Serial.println(F("eepromm 9:"));
-    Serial.println(EEPROM.read(9));
-    Serial.println(F("eepromm 10:"));
-    Serial.println(EEPROM.read(10));
+    myip[2] = EEPROM.read(8);//IP SEGMENT
+    gwip[2] = EEPROM.read(8);//GATEWAY SEGMENT
+    myip[3] = EEPROM.read(9);//DEVICE IP
+    gwip[3] = EEPROM.read(10);//GATEWAY/LAST BYTE  
+    EEPROM.write(EEPROM_INDEX_CONFIG,0);
+        
   }
   /**CALIBRATE EEPROM*/
   if(EEPROM.read(50)!=255){
@@ -267,23 +259,23 @@ void setup()
             Serial.println("Estoy en m");          
             break;
           default:
-            EEPROM.write(50, 255);
-            EEPROM.write(51, 255);
+            EEPROM.write(50,255);
+            EEPROM.write(51,255);
             break;
         }
                 
     }else{
-        EEPROM.write(50, 255);
-        EEPROM.write(51, 255);
+        EEPROM.write(50,255);
+        EEPROM.write(51,255);
       }
   }
   
-  delay(5000);
+  delay(100);
   ethconfig();
   tone(BUZZER, 6000); // Send 1KHz sound signal...
-  delay(500);         // ...for 1 sec
+  delay(100);         // ...for 1 sec
   noTone(BUZZER);     // Stop sound...
-  delay(500);
+  delay(100);
   tone(BUZZER, 5000); // Send 1KHz sound signal...
   delay(100);         // ...for 1 sec
   noTone(BUZZER);     // Stop sound...
@@ -295,87 +287,38 @@ void setup()
 //------------------------------------------------------------------------------------------------------
 void loop()
 {
+
   word pos = ether.packetLoop(ether.packetReceive());
   const char* reply = ether.tcpReply(tcpReplySession);
   if (reply != 0) {//Dec 0     Hex 00     NULL
-    //for(int i = 0; i < strlen(reply) - 189; i++) (String actualIp;)actualIp+ = actualIp + reply[187 + i];
     responseToPreviusLocalPostRequest=1;
-    
-    //Serial.println(reply[226]);//HTTP response= 218 characters + 9 newlines (\n) = 227 characteres. First in index 0 and last in index 226. last character=payload.   
-    // if(reply[226]=='3') {
-    //   Serial.println("PLUGED_DEVICE_CTL ON");
-    //   digitalWrite(PLUGED_DEVICE_CTL, HIGH); /**IMPORTANT: IF BATTERY >maxVoltaje THE DEVICE IS SET TO OFF */
-    // }
-    // if(reply[226]=='2') {
-    //   Serial.println("PLUGED_DEVICE_CTL OFF");
-    //   digitalWrite(PLUGED_DEVICE_CTL, LOW);
-    // }
+    Serial.println(reply);//HTTP response= 218 characters + 9 newlines (\n) = 227 characteres. First in index 0 and last in index 226. last character=payload.   
+    if(reply[226]=='3') {
+      Serial.println("PLUGED_DEVICE_CTL ON");
+      digitalWrite(PLUGED_DEVICE_CTL, HIGH); 
+    }
+    if(reply[226]=='2') {
+      Serial.println("PLUGED_DEVICE_CTL OFF");
+      digitalWrite(PLUGED_DEVICE_CTL, LOW);
+    }
   }
 
   unsigned long currentMillis = millis();
-  if (currentMillis >= 3600000)
+  if (currentMillis >= DEVICE_RESET_ITSELF)
   {
     resetFunc();
   }
 
-  if (currentMillis - previousMillis >= intervalForBatteryTasks)
-  { 
-    if (!responseToPreviusLocalPostRequest)//ether.dnsLookup(website)
-        if(ether.dnsLookup(website)){
-          resetFunc();
-        }
-    responseToPreviusLocalPostRequest=0;    
+  if (currentMillis - previousMillis >= intervalTimeForBatteryTasks){ 
     previousMillis = currentMillis;
-    float minVoltaje = 0;
-    float maxVoltaje = 0;
-    float voltajeBatterySource = 0;
-    if (BATTERYSYSTEM == SYSTEM1)
-    {
-      if (digitalRead(PLUGED_DEVICE_CTL))
-      {
-        digitalWrite(PLUGED_DEVICE_CTL, LOW); //turn off the battery charger
-        delay(DELAY_BEFORE_READ_BATTERY);
-        sensor1();
-        digitalWrite(PLUGED_DEVICE_CTL, HIGH); //turn on the battery charger
-        voltajeBatterySource = sensor1CalculatedValue;
-      }
-      else
-      {
-        sensor1();
-        voltajeBatterySource = sensor1CalculatedValue;
-      }
-      minVoltaje = 12.5;
-      maxVoltaje = 13.2;
+    if (!responseToPreviusLocalPostRequest){
+        resetFunc();
     }
-
-    if (voltajeBatterySource < minVoltaje)
-    {
-      digitalWrite(PLUGED_DEVICE_CTL, HIGH); //Normally opened Rele 5 volt-> ON
-      Serial.print("Voltaje menor a");
-      Serial.println(minVoltaje);
-      Serial.println("charging battery...");
-    }
-    if ((voltajeBatterySource >= minVoltaje) && (voltajeBatterySource <= (maxVoltaje)))
-    {
-      Serial.print("Voltaje Intermedio:");
-      Serial.print(voltajeBatterySource, 2);
-      Serial.println("...");
-      digitalWrite(PLUGED_DEVICE_CTL, HIGH); //Normally opened Rele 5 volt-> ON  < Forcing ON status of rele >
-    }
-    if (voltajeBatterySource > maxVoltaje)
-    {
-      digitalWrite(PLUGED_DEVICE_CTL, LOW); //Normaly opened rele 0 volts->OFF
-      Serial.print("Voltaje mayor a");
-      Serial.println(maxVoltaje, 2);
-      Serial.println(" Charging battery stop PLUGED_DEVICE_CTL, LOW");
-    }
-
-    if (sensor2CalculatedValue >= 4)
-    {
+    responseToPreviusLocalPostRequest=0;
+    if (sensor2CalculatedValue >= 4){
       ;//Serial.println("Si hay energia electrica");
     }
-    else
-    {
+    else{
       Serial.println("No hay energia electrica");
       for (int thisNote = 0; thisNote < notes * 2; thisNote = thisNote + 2)
       {
@@ -389,7 +332,7 @@ void loop()
           noteDuration = (wholenote) / abs(divider);
           noteDuration *= 1.0; // increases the duration in half for dotted notes
         }
-        tone(BUZZER, melody[thisNote], noteDuration * 0.5);
+        tone(BUZZER, melody[thisNote], noteDuration * 0.4);
         delay(noteDuration);
         noTone(BUZZER);
       }
@@ -397,21 +340,15 @@ void loop()
   }
   
   if (pos){ 
-    
-    // check if valid tcp data is received
-    // data received from ethernet
     char *data = (char *)Ethernet::buffer + pos;
-    Serial.println(F("----------------"));
-    Serial.println("data :");
-    Serial.println(data);
-    Serial.println(F("----------------"));
-
+    // Serial.println(data);
     if (strncmp("GET /5", data, 6) == 0)
     { 
+      
       requestStatus=1;
-      Serial.println("->");
+      // Serial.println("->");
       Serial.println(data[6]);
-      Serial.println("<-");
+      // Serial.println("<-");
       Serial.println(data[7]);
       char opt=data[6];
       char optVal=data[7];
@@ -423,8 +360,8 @@ void loop()
           ActionValueByGet = c - '0';
           requestStatus=ActionValueByGet>=0&&ActionValueByGet<10?1:0;
           if(requestStatus){
-          EEPROM.write(50, 'm');
-          EEPROM.write(51, ActionValueByGet);
+          EEPROM.write(50,'m');
+          EEPROM.write(51,ActionValueByGet);
           rstPending=1;
           }
         }
@@ -433,8 +370,8 @@ void loop()
           ActionValueByGet = c - '0';
           requestStatus=ActionValueByGet>=0&&ActionValueByGet<10?1:0;
           if(requestStatus){
-          EEPROM.write(50, 'l');
-          EEPROM.write(51, ActionValueByGet);
+          EEPROM.write(50,'l');
+          EEPROM.write(51,ActionValueByGet);
           rstPending=1;
           }
         }
@@ -456,18 +393,22 @@ void loop()
     }
     else if (strncmp("GET /RST", data, 8) == 0)
     { //definir si es para version rele de estado solido o rele de bobina
-      EEPROM.write(50, 255);//RESET CALIBRATE
-      EEPROM.write(51, 255);//RESET CALIBRATE
-      EEPROM.write(6, 1);
+      EEPROM.write(50,255);//RESET CALIBRATE
+      EEPROM.write(51,255);//RESET CALIBRATE
+      EEPROM.write(6,1);
       rstPending=1;
       ether.httpServerReply(homePagephone()); // send web page data
-      resetFunc();
+      // resetFunc();
     }
-    else if (strncmp("GET /RSTNTW", data, 11) == 0)
+    else if (strncmp("GET /DFNTW", data, 10) == 0)
     {
-      // byte myip[] = {192, 168, 55, 249};
-      // EEPROM.write(7, 1);
-      ethconfig();
+      //setting default ip address to => byte myip[] = {192, 168, 254, 20};
+      EEPROM.write(EEPROM_INDEX_CONFIG,1*1);
+      delay(100);
+      Serial.println(F("DFNTW  value: "));
+      Serial.println(EEPROM.read(EEPROM_INDEX_CONFIG));
+      //rstPending=1;
+      ether.httpServerReply(homePagephone()); // send web page data
     }
     else{
       requestStatus=0;

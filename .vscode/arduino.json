@@ -1,8 +1,8 @@
 {
-    "sketch": "v2/mqttVoltMonitorAndControl.ino",
+    "sketch": "v2/v2.ino",
     "port": "/dev/ttyUSB0",
     "configuration": "cpu=16MHzatmega328",
     "board": "arduino:avr:pro",
-    "programmer": "arduino:avrispmkii",
+    "programmer": "avrispmkii",
     "output": "../build"
 }
