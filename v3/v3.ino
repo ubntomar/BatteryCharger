@@ -1,3 +1,4 @@
+//V3 ACTIVATE AC CHARGER IF BATTERY IS LOW
 #include <EtherCard.h>
 #include <stdlib.h>    
 #include <EEPROM.h>
@@ -23,19 +24,16 @@
 #define SYSTEM1 12
 #define SYSTEM2 24
 
-#define DEVICE_LOCATION "RETIRO"
-#define DEVICE_SERIAL 115
-#define MAC {0x74, 0x69, 0x69, 0x2D, 0x30, 0x3B}
 
 
 #define DELAY_BEFORE_READ_BATTERY 100
 const long POSTrequestInterval = 7000; //(milliseconds)
-const long intervalTimeForBatteryTasks = 60000; //(milliseconds)  300000=>5 minutes 
+const long intervalTimeForBatteryTasks = 300000; //(milliseconds)  300000=>5 minutes 
 
 
 #define VPS_SERVER_IP "146.71.79.111"
 #define TOPIC_PATH "volts"
-const char websiteTarget[] PROGMEM = "myvpsserveraccount.com";
+const char websiteTarget[] PROGMEM = "myvpsserveraccount.com";//ether.hisip is used instead . websiteTarget doesnt really used
 unsigned long previousMillisForPOSTrequest = 0;
 Stash stash;
 
@@ -44,9 +42,12 @@ Stash stash;
 static byte tcpReplySession;
 byte responseToPreviusLocalPostRequest=0;
 
+#define DEVICE_LOCATION "RETIRO"
+#define DEVICE_SERIAL 116
+#define MAC {0x74, 0x69, 0x69, 0x2D, 0x30, 0x3B}
 byte mymac[] = MAC;                  
-#define TCP_PORT_FOR_HTTP_API 8013
-byte myip[] = {192, 168, 30, 254}; 
+#define TCP_PORT_FOR_HTTP_API 8013 //http://xxx.xxx.xxx.xxx:8013/50
+byte myip[] = {192, 168, 30, 253}; 
 byte netmask[] = {255, 255, 255, 0}; 
 byte gwip[] = {192, 168, 30, 1};     
 byte static_dns[] = {8, 8, 8, 8};    
@@ -272,11 +273,11 @@ void loop()
     Serial.println(reply);//HTTP response= 218 characters + 9 newlines (\n) = 227 characteres. First in index 0 and last in index 226. last character=payload.   
     if(reply[226]=='3') {
       Serial.println("PLUGED_DEVICE_CTL ON");
-      digitalWrite(PLUGED_DEVICE_CTL, HIGH); 
+      //digitalWrite(PLUGED_DEVICE_CTL, HIGH); 
     }
     if(reply[226]=='2') {
       Serial.println("PLUGED_DEVICE_CTL OFF");
-      digitalWrite(PLUGED_DEVICE_CTL, LOW);
+      //digitalWrite(PLUGED_DEVICE_CTL, LOW);
     }
   }
 
@@ -288,10 +289,66 @@ void loop()
 
   if (currentMillis - previousMillis >= intervalTimeForBatteryTasks){ 
     previousMillis = currentMillis;
+    ////////////////BATTERY AC CHARGER/////
+    float minVoltaje = 0;
+    float maxVoltaje = 0;
+    int pwnChargeVolt = 0;
+    float voltajeBatterySource = 0;
+    if (BATTERYSYSTEM == SYSTEM1)
+    {
+      Serial.println("*****************************");
+      if (digitalRead(PLUGED_DEVICE_CTL))
+      {
+        digitalWrite(PLUGED_DEVICE_CTL, LOW); //turn off the battery charger
+        delay(5000);
+        sensor1();
+        digitalWrite(PLUGED_DEVICE_CTL, HIGH); //turn on the battery charger
+        voltajeBatterySource = sensor1CalculatedValue;
+      }
+      else
+      {
+        sensor1();
+        voltajeBatterySource = sensor1CalculatedValue;
+      }
+      Serial.println("*****************************");
+      minVoltaje = 12.5;
+      maxVoltaje = 13.2;
+      pwnChargeVolt = 254; //160
+    }
+
+    if (voltajeBatterySource < minVoltaje)
+    {
+      digitalWrite(PLUGED_DEVICE_CTL, HIGH); //Normally opened Rele 5 volt-> ON
+      Serial.print("Voltaje menor a");
+      Serial.println(minVoltaje);
+      Serial.println("charging battery...");
+    }
+    if ((voltajeBatterySource >= minVoltaje) && (voltajeBatterySource <= (maxVoltaje)))
+    {
+      Serial.print("Voltaje Intermedio:");
+      Serial.print(voltajeBatterySource, 2);
+      Serial.println("...");
+      digitalWrite(PLUGED_DEVICE_CTL, HIGH); //Normally opened Rele 5 volt-> ON  < Forcing ON status of rele >
+    }
+    if (voltajeBatterySource > maxVoltaje)
+    {
+      digitalWrite(PLUGED_DEVICE_CTL, LOW); //Normaly opened rele 0 volts->OFF
+      Serial.print("Voltaje mayor a");
+      Serial.println(maxVoltaje, 2);
+      Serial.println(" Charging battery stop");
+    }
+
+    if (sensor2CalculatedValue >= 4)
+    {
+      Serial.println("Si hay energia electrica");
+    }
+    else
+    ///////////////////////////////////////
     if (!responseToPreviusLocalPostRequest){
         resetFunc();
     }
     responseToPreviusLocalPostRequest=0;
+    ///////////////////////////////////////
 
 
 

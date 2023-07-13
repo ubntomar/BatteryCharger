@@ -1,5 +1,5 @@
 {
-    "sketch": "v2/v2.ino",
+    "sketch": "v3/v3.ino",
     "port": "/dev/ttyUSB0",
     "configuration": "cpu=16MHzatmega328",
     "board": "arduino:avr:pro",
